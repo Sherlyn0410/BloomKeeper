@@ -14,7 +14,7 @@ test('a guest can view the login and signup pages', function () {
         ->assertSee('Create your account');
 });
 
-test('a user can sign up and is taken to the dashboard', function () {
+test('a user can sign up and must wait for administrator approval', function () {
     $response = $this->post(route('register.store'), [
         'name' => 'Mina Flores',
         'email' => 'mina@example.com',
@@ -23,12 +23,13 @@ test('a user can sign up and is taken to the dashboard', function () {
         'password_confirmation' => 'secret-password',
     ]);
 
-    $response->assertRedirectToRoute('dashboard');
-    $this->assertAuthenticated();
+    $response->assertRedirectToRoute('login');
+    $this->assertGuest();
     $this->assertDatabaseHas('users', [
         'name' => 'Mina Flores',
         'email' => 'mina@example.com',
         'role' => 'supplier',
+        'approval_status' => 'pending',
     ]);
 });
 
@@ -79,6 +80,22 @@ test('invalid login credentials are rejected', function () {
     $response = $this->from(route('login'))->post(route('login.store'), [
         'email' => $user->email,
         'password' => 'wrong-password',
+    ]);
+
+    $response->assertRedirect(route('login'));
+    $response->assertSessionHasErrors('email');
+    $this->assertGuest();
+});
+
+test('pending users cannot sign in', function () {
+    $user = User::factory()->create([
+        'password' => 'secret-password',
+        'approval_status' => 'pending',
+    ]);
+
+    $response = $this->from(route('login'))->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'secret-password',
     ]);
 
     $response->assertRedirect(route('login'));

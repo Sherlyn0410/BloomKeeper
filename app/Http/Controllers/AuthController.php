@@ -34,6 +34,14 @@ class AuthController extends Controller
                 ->withInput($request->only('email', 'remember'));
         }
 
+        if (Auth::user()->approval_status !== 'approved') {
+            Auth::logout();
+
+            return back()
+                ->withErrors(['email' => 'Your account is waiting for administrator approval or has been suspended.'])
+                ->withInput($request->only('email', 'remember'));
+        }
+
         $request->session()->regenerate();
 
         return redirect()->intended(route('dashboard'));
@@ -53,12 +61,12 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', 'string', 'min:8'],
         ]);
 
-        $user = User::create($validated);
+        User::create([
+            ...$validated,
+            'approval_status' => 'pending',
+        ]);
 
-        Auth::login($user);
-        $request->session()->regenerate();
-
-        return redirect()->route('dashboard');
+        return redirect()->route('login')->with('status', 'Your account is waiting for administrator approval.');
     }
 
     public function logout(Request $request): RedirectResponse
