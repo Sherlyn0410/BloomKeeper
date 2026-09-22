@@ -13,11 +13,7 @@
         <x-auth-field name="email" label="Email" type="email" autocomplete="email" placeholder="you@example.com" autofocus />
         <x-auth-field name="password" label="Password" type="password" autocomplete="current-password" placeholder="Enter your password" />
 
-        <div class="flex items-center justify-between gap-4 text-sm">
-            <label class="flex items-center gap-2 text-[#607a72]">
-                <input type="checkbox" name="remember" value="1" @checked(old('remember')) class="size-4 rounded border-[#b8cfca] text-[#285443] focus:ring-[#285443]">
-                Remember me
-            </label>
+        <div class="flex justify-end text-sm">
             <a href="{{ route('password.request') }}" class="font-medium text-[#285443] underline decoration-[#9cbcb4] underline-offset-4 hover:text-[#173d30]">Forgot password?</a>
         </div>
 

@@ -3,8 +3,12 @@
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthController;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\View;
 
 Route::redirect('/', '/login');
 
@@ -20,10 +24,7 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware('auth')->group(function (): void {
-    Route::get('/dashboard', function (): RedirectResponse {
-        return redirect()->route(auth()->user()->role === 'admin' ? 'admin.dashboard' : 'dashboard.user');
-    })->name('dashboard');
-    Route::view('/workspace', 'dashboard')->name('dashboard.user');
+    Route::view('/dashboard', 'dashboard')->name('dashboard');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function (): void {

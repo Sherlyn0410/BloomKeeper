@@ -18,7 +18,7 @@
                 <p class="text-sm text-red-700">{{ $message }}</p>
             @enderror
         </div>
-        <x-auth-field name="password" label="Password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+        <x-auth-field name="password" label="Password" type="password" autocomplete="new-password" placeholder="At least 8 characters" password-strength />
         <x-auth-field name="password_confirmation" label="Confirm password" type="password" autocomplete="new-password" placeholder="Repeat your password" />
 
         <button type="submit" class="w-full rounded-lg bg-[#2d2d2d] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#1c1c1c] focus:outline-none focus:ring-2 focus:ring-[#285443] focus:ring-offset-2">

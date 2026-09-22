@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Support\Facades\Notification;
 
 test('a guest can view the login and signup pages', function () {
@@ -14,7 +15,9 @@ test('a guest can view the login and signup pages', function () {
         ->assertSee('Create your account');
 });
 
-test('a user can sign up and must wait for administrator approval', function () {
+test('a user can sign up and receives an email verification notification', function () {
+    Notification::fake();
+
     $response = $this->post(route('register.store'), [
         'name' => 'Mina Flores',
         'email' => 'mina@example.com',
@@ -23,14 +26,25 @@ test('a user can sign up and must wait for administrator approval', function () 
         'password_confirmation' => 'secret-password',
     ]);
 
-    $response->assertRedirectToRoute('login');
-    $this->assertGuest();
+    $response->assertRedirectToRoute('dashboard');
+    $this->assertAuthenticated();
     $this->assertDatabaseHas('users', [
         'name' => 'Mina Flores',
         'email' => 'mina@example.com',
         'role' => 'supplier',
         'approval_status' => 'pending',
     ]);
+});
+
+test('a user can resend the email verification notification', function () {
+    Notification::fake();
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->post(route('verification.send'));
+
+    $response->assertRedirect();
+    $response->assertSessionHas('status', 'A verification link has been sent to your email address.');
+    Notification::assertSentTo($user, VerifyEmail::class);
 });
 
 test('signup does not allow admin role creation', function () {
@@ -72,6 +86,19 @@ test('a user can sign in with valid credentials', function () {
     $this->assertAuthenticatedAs($user);
 });
 
+test('the dashboard cannot be cached', function () {
+    $user = User::factory()->create([
+        'email_verified_at' => now(),
+    ]);
+
+    $response = $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk();
+
+    expect($response->headers->get('Cache-Control'))->toContain('no-store');
+    expect($response->headers->get('Pragma'))->toBe('no-cache');
+});
+
 test('invalid login credentials are rejected', function () {
     $user = User::factory()->create([
         'password' => 'secret-password',
@@ -104,12 +131,15 @@ test('pending users cannot sign in', function () {
 });
 
 test('an authenticated user can sign out', function () {
-    $this->actingAs(User::factory()->create());
+    $user = User::factory()->create();
+
+    $this->actingAs($user);
 
     $response = $this->post(route('logout'));
 
     $response->assertRedirectToRoute('login');
     $this->assertGuest();
+    $this->get(route('dashboard'))->assertRedirectToRoute('login');
 });
 
 test('a guest can request a password reset link', function () {
@@ -121,6 +151,6 @@ test('a guest can request a password reset link', function () {
     ]);
 
     $response->assertRedirect(route('password.request'));
-    $response->assertSessionHas('status');
+    $response->assertSessionHas('status', 'We sent a password reset link to your email address.');
     Notification::assertSentTo($user, ResetPassword::class);
 });

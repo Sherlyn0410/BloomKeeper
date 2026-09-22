@@ -8,7 +8,7 @@
         @csrf
         <input type="hidden" name="token" value="{{ $token }}">
         <x-auth-field name="email" label="Email" type="email" autocomplete="email" placeholder="you@example.com" :value="$email" autofocus />
-        <x-auth-field name="password" label="New password" type="password" autocomplete="new-password" placeholder="At least 8 characters" />
+        <x-auth-field name="password" label="New password" type="password" autocomplete="new-password" placeholder="At least 8 characters" password-strength />
         <x-auth-field name="password_confirmation" label="Confirm new password" type="password" autocomplete="new-password" placeholder="Repeat your password" />
         <button type="submit" class="w-full rounded-lg bg-[#2d2d2d] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#1c1c1c] focus:outline-none focus:ring-2 focus:ring-[#285443] focus:ring-offset-2">
             Reset password
