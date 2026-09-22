@@ -22,12 +22,24 @@ class AuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+            'remember' => ['sometimes', 'boolean'],
         ]);
 
-        if (! Auth::attempt($credentials)) {
+        $remember = (bool) ($credentials['remember'] ?? false);
+        unset($credentials['remember']);
+
+        if (! Auth::attempt($credentials, $remember)) {
             return back()
                 ->withErrors(['email' => 'These credentials do not match our records.'])
                 ->withInput($request->only('email'));
+        }
+
+        if (Auth::user()->approval_status !== 'approved') {
+            Auth::logout();
+
+            return back()
+                ->withErrors(['email' => 'Your account is waiting for administrator approval or has been suspended.'])
+                ->withInput($request->only('email', 'remember'));
         }
 
         $request->session()->regenerate();
@@ -49,13 +61,12 @@ class AuthController extends Controller
             'password' => ['required', 'confirmed', 'string', 'min:8'],
         ]);
 
-        $user = User::create($validated);
+        User::create([
+            ...$validated,
+            'approval_status' => 'pending',
+        ]);
 
-        Auth::login($user);
-        $request->session()->regenerate();
-        $user->sendEmailVerificationNotification();
-
-        return redirect()->route('verification.notice');
+        return redirect()->route('login')->with('status', 'Your account is waiting for administrator approval.');
     }
 
     public function logout(Request $request): RedirectResponse

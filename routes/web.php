@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminOperationsController;
+use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
@@ -35,11 +38,37 @@ Route::middleware('auth')->group(function (): void {
 
         return back()->with('status', 'A verification link has been sent to your email address.');
     })->middleware('throttle:6,1')->name('verification.send');
-    Route::get('/dashboard', function (): Response {
+    Route::get('/dashboard', function (): Response|RedirectResponse {
+        if (auth()->user()->role === 'admin') {
+            return redirect()->route('admin.dashboard');
+        }
+
         return response()
             ->view('dashboard')
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache');
-    })->middleware('verified')->name('dashboard');
+    })->name('dashboard');
+    Route::view('/workspace', 'dashboard')->name('dashboard.user');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+    Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function (): void {
+        Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
+        Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
+        Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
+        Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggle-status');
+        Route::patch('/users/{user}/approve', [AdminUserController::class, 'approve'])->name('users.approve');
+        Route::patch('/users/{user}/suspend', [AdminUserController::class, 'suspend'])->name('users.suspend');
+        Route::patch('/users/{user}/restore', [AdminUserController::class, 'restore'])->name('users.restore');
+        Route::get('/operations', [AdminOperationsController::class, 'index'])->name('operations');
+        Route::post('/inventory', [AdminOperationsController::class, 'storeInventory'])->name('inventory.store');
+        Route::put('/inventory/{inventoryItem}', [AdminOperationsController::class, 'updateInventory'])->name('inventory.update');
+        Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
+        Route::post('/inventory/{inventoryItem}/adjust', [AdminOperationsController::class, 'adjustInventory'])->name('inventory.adjust');
+        Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->name('orders.status');
+        Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
+        Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->name('purchase-orders.status');
+        Route::put('/settings', [AdminOperationsController::class, 'updateSettings'])->name('settings.update');
+        Route::get('/reports/export', [AdminOperationsController::class, 'exportReport'])->name('reports.export');
+    });
 });
