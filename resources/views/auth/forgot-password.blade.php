@@ -8,10 +8,10 @@
         <p class="mt-5 rounded-lg bg-[#d6eee9] px-3 py-2 text-sm text-[#285443]">{{ session('status') }}</p>
     @endif
 
-    <form method="POST" action="{{ route('password.email') }}" class="mt-7 space-y-5">
+    <form method="POST" action="{{ route('password.email') }}" class="mt-7 space-y-5" data-submit-once>
         @csrf
         <x-auth-field name="email" label="Email" type="email" autocomplete="email" placeholder="you@example.com" autofocus />
-        <button type="submit" class="w-full rounded-lg bg-[#2d2d2d] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#1c1c1c] focus:outline-none focus:ring-2 focus:ring-[#285443] focus:ring-offset-2">
+        <button type="submit" data-submit-button class="w-full rounded-lg bg-[#2d2d2d] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#1c1c1c] focus:outline-none focus:ring-2 focus:ring-[#285443] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60">
             Email reset link
         </button>
     </form>

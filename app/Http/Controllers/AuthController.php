@@ -22,16 +22,12 @@ class AuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
-            'remember' => ['sometimes', 'boolean'],
         ]);
 
-        $remember = (bool) ($credentials['remember'] ?? false);
-        unset($credentials['remember']);
-
-        if (! Auth::attempt($credentials, $remember)) {
+        if (! Auth::attempt($credentials)) {
             return back()
                 ->withErrors(['email' => 'These credentials do not match our records.'])
-                ->withInput($request->only('email', 'remember'));
+                ->withInput($request->only('email'));
         }
 
         $request->session()->regenerate();
@@ -57,8 +53,9 @@ class AuthController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        $user->sendEmailVerificationNotification();
 
-        return redirect()->route('dashboard');
+        return redirect()->route('verification.notice');
     }
 
     public function logout(Request $request): RedirectResponse
@@ -89,7 +86,7 @@ class AuthController extends Controller
                 ->withInput();
         }
 
-        return redirect()->route('password.request')->with('status', __($status));
+        return redirect()->route('password.request')->with('status', 'We sent a password reset link to your email address.');
     }
 
     public function showResetPassword(string $token): View

@@ -1,7 +1,12 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\View;
 
 Route::redirect('/', '/login');
 
@@ -17,6 +22,24 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware('auth')->group(function (): void {
-    Route::view('/dashboard', 'dashboard')->name('dashboard');
+    Route::get('/email/verify', function (): View {
+        return view('auth.verify-email');
+    })->name('verification.notice');
+    Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request): RedirectResponse {
+        $request->fulfill();
+
+        return redirect()->route('dashboard');
+    })->middleware('signed')->name('verification.verify');
+    Route::post('/email/verification-notification', function (Request $request): RedirectResponse {
+        $request->user()->sendEmailVerificationNotification();
+
+        return back()->with('status', 'A verification link has been sent to your email address.');
+    })->middleware('throttle:6,1')->name('verification.send');
+    Route::get('/dashboard', function (): Response {
+        return response()
+            ->view('dashboard')
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache');
+    })->middleware('verified')->name('dashboard');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 });
