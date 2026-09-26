@@ -34,11 +34,17 @@ class AuthController extends Controller
                 ->withInput($request->only('email'));
         }
 
+        if (! Auth::user()->hasVerifiedEmail()) {
+            $request->session()->regenerate();
+
+            return redirect()->route('verification.notice');
+        }
+
         if (Auth::user()->approval_status !== 'approved') {
             Auth::logout();
 
             return back()
-                ->withErrors(['email' => 'Your account is waiting for administrator approval or has been suspended.'])
+                ->withErrors(['email' => 'Your account is waiting for administrator approval, has been declined, or has been suspended.'])
                 ->withInput($request->only('email', 'remember'));
         }
 
@@ -57,16 +63,19 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
-            'role' => ['required', 'in:florist,supplier'],
+            'role' => ['required', 'in:staff,supplier'],
             'password' => ['required', 'confirmed', 'string', 'min:8'],
         ]);
 
-        User::create([
+        $user = User::create([
             ...$validated,
             'approval_status' => 'pending',
         ]);
 
-        return redirect()->route('login')->with('status', 'Your account is waiting for administrator approval.');
+        Auth::login($user);
+        $user->sendEmailVerificationNotification();
+
+        return redirect()->route('verification.notice')->with('status', 'Verify your email while your account waits for administrator approval.');
     }
 
     public function logout(Request $request): RedirectResponse

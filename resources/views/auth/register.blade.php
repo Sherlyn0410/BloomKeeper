@@ -11,7 +11,7 @@
         <div class="space-y-2">
             <label for="role" class="block text-sm font-medium text-[#29463e]">Account type</label>
             <select id="role" name="role" class="block w-full rounded-lg border border-[#c6d8d4] bg-white px-3 py-2.5 text-sm text-[#29463e] shadow-sm outline-none transition focus:border-[#285443] focus:ring-2 focus:ring-[#285443]/15">
-                <option value="florist" @selected(old('role', 'florist') === 'florist')>Florist</option>
+                <option value="staff" @selected(old('role', 'staff') === 'staff')>Staff</option>
                 <option value="supplier" @selected(old('role') === 'supplier')>Supplier</option>
             </select>
             @error('role')

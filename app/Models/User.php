@@ -18,7 +18,7 @@ class User extends Authenticatable implements MustVerifyEmail
     use HasFactory, Notifiable;
 
     protected $attributes = [
-        'role' => 'florist',
+        'role' => 'staff',
         'approval_status' => 'approved',
     ];
 

@@ -35,6 +35,18 @@ document.querySelectorAll('[data-submit-once]').forEach((form) => {
 	});
 });
 
+document.querySelectorAll('[data-live-filter]').forEach((form) => {
+
+	let timeout;
+	const submit = () => form.requestSubmit();
+
+	form.querySelector('[data-live-filter-input]')?.addEventListener('input', () => {
+		clearTimeout(timeout);
+		timeout = setTimeout(submit, 350);
+	});
+	form.querySelector('[data-live-filter-select]')?.addEventListener('change', submit);
+});
+
 document.querySelectorAll('[data-password-strength-input]').forEach((input) => {
 	const container = input.closest('.space-y-2');
 	const segments = container.querySelectorAll('[data-password-strength-segment]');

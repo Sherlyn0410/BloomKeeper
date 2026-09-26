@@ -10,26 +10,22 @@ use Illuminate\View\View;
 
 class AdminUserController extends Controller
 {
-    public function index(Request $request): View
+    public function users(Request $request): View
     {
-        $users = User::query()->whereIn('role', ['staff', 'supplier', 'admin']);
-        $users->when($request->filled('role'), fn ($query) => $query->where('role', $request->string('role')));
-        $users->when($request->filled('status'), fn ($query) => $query->where('approval_status', $request->string('status')));
+        $accountRole = $request->string('role')->toString();
+        $accountRole = in_array($accountRole, ['staff', 'supplier'], true) ? $accountRole : 'staff';
 
         return view('admin.users.index', [
-            'users' => $users->latest()->paginate(10)->withQueryString(),
+            'accountRole' => $accountRole,
+            'accountLabel' => $accountRole === 'supplier' ? 'Supplier' : 'Staff',
+            'users' => User::query()->where('role', $accountRole)
+                ->when($request->filled('status'), fn ($query) => $query->where('approval_status', $request->string('status')))
+                ->when($request->filled('search'), function ($query) use ($request): void {
+                    $search = '%'.$request->string('search')->toString().'%';
+                    $query->where(fn ($query) => $query->where('name', 'like', $search)->orWhere('email', 'like', $search));
+                })
+                ->latest()->paginate(10)->withQueryString(),
         ]);
-    }
-
-    public function store(Request $request): RedirectResponse
-    {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'], 'email' => ['required', 'email', 'unique:users,email'],
-            'role' => ['required', 'in:staff,supplier'], 'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
-        User::create([...$data, 'password' => Hash::make($data['password']), 'approval_status' => 'approved']);
-
-        return back()->with('status', 'Account created.');
     }
 
     public function update(Request $request, User $user): RedirectResponse
@@ -61,6 +57,14 @@ class AdminUserController extends Controller
         $user->update(['approval_status' => 'approved']);
 
         return back()->with('status', "{$user->name} can now sign in.");
+    }
+
+    public function decline(User $user): RedirectResponse
+    {
+        abort_if($user->is(auth()->user()), 422, 'You cannot decline your own account.');
+        $user->update(['approval_status' => 'declined']);
+
+        return back()->with('status', "{$user->name}'s account was declined.");
     }
 
     public function suspend(User $user): RedirectResponse

@@ -31,6 +31,6 @@ class AdminUserSeeder extends Seeder
 
         User::where('role', 'admin')
             ->where('email', '!=', $email)
-            ->update(['role' => 'florist']);
+            ->update(['role' => 'staff']);
     }
 }

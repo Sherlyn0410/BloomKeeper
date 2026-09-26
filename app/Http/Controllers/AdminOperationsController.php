@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\BusinessSetting;
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
 use App\Models\OrderItem;
 use App\Models\PurchaseOrder;
-use App\Models\StockAdjustment;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,17 +18,39 @@ class AdminOperationsController extends Controller
 {
     public function index(Request $request): View
     {
+        return $this->inventory($request);
+    }
+
+    public function inventory(Request $request): View
+    {
+        return view('admin.inventory', [
+            'inventory' => InventoryItem::query()->orderBy('flower_type')->get(),
+        ]);
+    }
+
+    public function orders(Request $request): View
+    {
         $orders = CustomerOrder::query()->with(['items', 'creator'])->latest();
         $orders->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')));
         $orders->when($request->filled('customer'), fn ($query) => $query->where('customer_name', 'like', '%'.$request->string('customer').'%'));
         $orders->when($request->filled('date'), fn ($query) => $query->whereDate('collection_date', $request->date('date')));
 
-        return view('admin.operations', [
-            'inventory' => InventoryItem::query()->orderBy('flower_type')->get(),
+        return view('admin.orders', [
             'orders' => $orders->get(),
+        ]);
+    }
+
+    public function purchaseOrders(Request $request): View
+    {
+        return view('admin.purchase-orders', [
             'purchaseOrders' => PurchaseOrder::query()->with(['items', 'creator'])->latest()->get(),
             'suppliers' => User::query()->where('role', 'supplier')->where('approval_status', 'approved')->orderBy('name')->get(),
-            'settings' => BusinessSetting::query()->pluck('value', 'key'),
+        ]);
+    }
+
+    public function reports(Request $request): View
+    {
+        return view('admin.reports', [
             'report' => $this->report($request),
         ]);
     }
@@ -65,18 +85,6 @@ class AdminOperationsController extends Controller
         return back()->with('status', 'Inventory item deleted.');
     }
 
-    public function adjustInventory(Request $request, InventoryItem $inventoryItem): RedirectResponse
-    {
-        $data = $request->validate(['quantity_change' => ['required', 'integer', 'not_in:0'], 'reason' => ['required', 'string', 'max:255']]);
-        abort_if($data['quantity_change'] < 0 && $inventoryItem->quantity < abs($data['quantity_change']), 422, 'Adjustment cannot reduce stock below zero.');
-        DB::transaction(function () use ($data, $inventoryItem): void {
-            $inventoryItem->increment('quantity', $data['quantity_change']);
-            StockAdjustment::create([...$data, 'inventory_item_id' => $inventoryItem->id, 'user_id' => auth()->id()]);
-        });
-
-        return back()->with('status', 'Stock adjusted.');
-    }
-
     public function updateOrderStatus(Request $request, CustomerOrder $customerOrder): RedirectResponse
     {
         $customerOrder->update($request->validate(['status' => ['required', 'in:pending,ready,completed,cancelled']]));
@@ -103,19 +111,6 @@ class AdminOperationsController extends Controller
         $purchaseOrder->update($request->validate(['status' => ['required', 'in:sent,fulfilled,cancelled']]));
 
         return back()->with('status', 'Purchase order status updated.');
-    }
-
-    public function updateSettings(Request $request): RedirectResponse
-    {
-        $data = $request->validate([
-            'business_name' => ['required', 'string', 'max:255'], 'business_contact' => ['nullable', 'string', 'max:255'],
-            'spoilage_alert_days' => ['required', 'integer', 'min:0', 'max:365'],
-        ]);
-        foreach ($data as $key => $value) {
-            BusinessSetting::updateOrCreate(['key' => $key], ['value' => $value]);
-        }
-
-        return back()->with('status', 'Settings saved.');
     }
 
     public function exportReport(Request $request): StreamedResponse

@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
 
@@ -39,6 +40,16 @@ Route::middleware('auth')->group(function (): void {
         return back()->with('status', 'A verification link has been sent to your email address.');
     })->middleware('throttle:6,1')->name('verification.send');
     Route::get('/dashboard', function (): Response|RedirectResponse {
+        if (! auth()->user()->hasVerifiedEmail()) {
+            return redirect()->route('verification.notice');
+        }
+
+        if (auth()->user()->approval_status !== 'approved') {
+            Auth::logout();
+
+            return redirect()->route('login')->withErrors(['email' => 'Your account still needs administrator approval.']);
+        }
+
         if (auth()->user()->role === 'admin') {
             return redirect()->route('admin.dashboard');
         }
@@ -48,27 +59,31 @@ Route::middleware('auth')->group(function (): void {
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache');
     })->name('dashboard');
-    Route::view('/workspace', 'dashboard')->name('dashboard.user');
+    Route::get('/workspace', function (): Response|RedirectResponse {
+        return redirect()->route('dashboard');
+    })->name('dashboard.user');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function (): void {
         Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
-        Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
-        Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
+        Route::get('/users', [AdminUserController::class, 'users'])->name('users');
         Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
         Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggle-status');
         Route::patch('/users/{user}/approve', [AdminUserController::class, 'approve'])->name('users.approve');
+        Route::patch('/users/{user}/decline', [AdminUserController::class, 'decline'])->name('users.decline');
         Route::patch('/users/{user}/suspend', [AdminUserController::class, 'suspend'])->name('users.suspend');
         Route::patch('/users/{user}/restore', [AdminUserController::class, 'restore'])->name('users.restore');
         Route::get('/operations', [AdminOperationsController::class, 'index'])->name('operations');
+        Route::get('/inventory', [AdminOperationsController::class, 'inventory'])->name('inventory');
+        Route::get('/orders', [AdminOperationsController::class, 'orders'])->name('orders');
+        Route::get('/purchase-orders', [AdminOperationsController::class, 'purchaseOrders'])->name('purchase-orders');
+        Route::get('/reports', [AdminOperationsController::class, 'reports'])->name('reports');
         Route::post('/inventory', [AdminOperationsController::class, 'storeInventory'])->name('inventory.store');
         Route::put('/inventory/{inventoryItem}', [AdminOperationsController::class, 'updateInventory'])->name('inventory.update');
         Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
-        Route::post('/inventory/{inventoryItem}/adjust', [AdminOperationsController::class, 'adjustInventory'])->name('inventory.adjust');
         Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->name('orders.status');
         Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
         Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->name('purchase-orders.status');
-        Route::put('/settings', [AdminOperationsController::class, 'updateSettings'])->name('settings.update');
         Route::get('/reports/export', [AdminOperationsController::class, 'exportReport'])->name('reports.export');
     });
 });

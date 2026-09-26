@@ -16,6 +16,8 @@ test('a guest can view the login and signup pages', function () {
 });
 
 test('a user can sign up and must wait for administrator approval', function () {
+    Notification::fake();
+
     $response = $this->post(route('register.store'), [
         'name' => 'Mina Flores',
         'email' => 'mina@example.com',
@@ -24,13 +26,31 @@ test('a user can sign up and must wait for administrator approval', function () 
         'password_confirmation' => 'secret-password',
     ]);
 
-    $response->assertRedirectToRoute('login');
-    $this->assertGuest();
+    $response->assertRedirectToRoute('verification.notice');
+    $this->assertAuthenticated();
+    Notification::assertSentTo(User::where('email', 'mina@example.com')->first(), VerifyEmail::class);
     $this->assertDatabaseHas('users', [
         'name' => 'Mina Flores',
         'email' => 'mina@example.com',
         'role' => 'supplier',
         'approval_status' => 'pending',
+    ]);
+});
+
+test('a staff signup stores the staff role', function () {
+    Notification::fake();
+
+    $this->post(route('register.store'), [
+        'name' => 'Staff Member',
+        'email' => 'staff@example.com',
+        'role' => 'staff',
+        'password' => 'secret-password',
+        'password_confirmation' => 'secret-password',
+    ]);
+
+    $this->assertDatabaseHas('users', [
+        'email' => 'staff@example.com',
+        'role' => 'staff',
     ]);
 });
 
@@ -84,6 +104,33 @@ test('a user can sign in with valid credentials', function () {
     $this->assertAuthenticatedAs($user);
 });
 
+test('an unverified user is sent to email verification after login', function () {
+    $user = User::factory()->unverified()->create([
+        'password' => 'secret-password',
+    ]);
+
+    $response = $this->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'secret-password',
+    ]);
+
+    $response->assertRedirectToRoute('verification.notice');
+    $this->assertAuthenticatedAs($user);
+});
+
+test('a verified but unapproved user cannot enter the dashboard', function () {
+    $user = User::factory()->create([
+        'approval_status' => 'pending',
+        'email_verified_at' => now(),
+    ]);
+
+    $response = $this->actingAs($user)->get(route('dashboard'));
+
+    $response->assertRedirectToRoute('login');
+    $response->assertSessionHasErrors('email');
+    $this->assertGuest();
+});
+
 test('the dashboard cannot be cached', function () {
     $user = User::factory()->create([
         'email_verified_at' => now(),
@@ -116,6 +163,22 @@ test('pending users cannot sign in', function () {
     $user = User::factory()->create([
         'password' => 'secret-password',
         'approval_status' => 'pending',
+    ]);
+
+    $response = $this->from(route('login'))->post(route('login.store'), [
+        'email' => $user->email,
+        'password' => 'secret-password',
+    ]);
+
+    $response->assertRedirect(route('login'));
+    $response->assertSessionHasErrors('email');
+    $this->assertGuest();
+});
+
+test('declined users cannot sign in', function () {
+    $user = User::factory()->create([
+        'password' => 'secret-password',
+        'approval_status' => 'declined',
     ]);
 
     $response = $this->from(route('login'))->post(route('login.store'), [
