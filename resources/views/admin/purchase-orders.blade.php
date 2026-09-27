@@ -1,5 +1,5 @@
 <x-admin.layout
-    title="Purchase orders"
+    title="Purchase Orders"
     description="Create supplier requests and track which flower deliveries are sent, fulfilled, or cancelled."
 >
     <section class="rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">

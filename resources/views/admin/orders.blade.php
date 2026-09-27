@@ -1,5 +1,5 @@
 <x-admin.layout
-    title="Customer orders"
+    title="Customer Orders"
     description="Review customer collections, inspect order items, and move each order through fulfilment."
 >
     <section class="rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">

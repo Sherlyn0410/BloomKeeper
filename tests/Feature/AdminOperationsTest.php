@@ -72,6 +72,89 @@ test('the exported sales report includes a header, sales figures, and a total ro
         ->and($sheet->getStyle('B8')->getFont()->getBold())->toBeTrue();
 });
 
+test('the sales report page shows sales figures and excludes cancelled orders', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50, 'date_received' => '2026-09-20', 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $order = CustomerOrder::create([
+        'created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-23', 'status' => 'pending',
+    ]);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Roses', 'quantity' => 4, 'unit_price' => 2.50]);
+    $cancelledOrder = CustomerOrder::create([
+        'created_by' => $admin->id, 'customer_name' => 'Leo Tan', 'collection_date' => '2026-09-24', 'status' => 'cancelled',
+    ]);
+    OrderItem::create(['customer_order_id' => $cancelledOrder->id, 'flower_type' => 'Lilies', 'quantity' => 9, 'unit_price' => 3.00]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.reports', ['from' => '2026-09-01', 'to' => '2026-09-30']))
+        ->assertOk()
+        ->assertSee('01 Sep 2026 to 30 Sep 2026')
+        ->assertSee('RM 10.00')
+        ->assertSee('Roses')
+        ->assertDontSee('Lilies');
+});
+
+test('the sales report can be sorted by the selected column', function (array $query, array $expectedOrder) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = CustomerOrder::create([
+        'created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-23', 'status' => 'pending',
+    ]);
+
+    foreach (['Lilies' => [5, 3.00], 'Roses' => [12, 1.00], 'Tulips' => [2, 10.00]] as $flowerType => [$quantity, $unitPrice]) {
+        InventoryItem::create(['flower_type' => $flowerType, 'quantity' => 20, 'unit_price' => $unitPrice, 'date_received' => '2026-09-20', 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+        OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => $flowerType, 'quantity' => $quantity, 'unit_price' => $unitPrice]);
+    }
+
+    $this->actingAs($admin)
+        ->get(route('admin.reports', $query))
+        ->assertOk()
+        ->assertSeeInOrder($expectedOrder);
+})->with([
+    'flower type by default' => [[], ['Lilies', 'Roses', 'Tulips']],
+    'quantity descending' => [['sort' => 'quantity', 'direction' => 'desc'], ['Roses', 'Lilies', 'Tulips']],
+    'total sales ascending' => [['sort' => 'total_sales', 'direction' => 'asc'], ['Roses', 'Lilies', 'Tulips']],
+    'total sales descending' => [['sort' => 'total_sales', 'direction' => 'desc'], ['Tulips', 'Lilies', 'Roses']],
+    'unknown column falls back to flower type' => [['sort' => 'unit_price'], ['Lilies', 'Roses', 'Tulips']],
+]);
+
+test('the exported sales report follows the selected sort', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = CustomerOrder::create([
+        'created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-23', 'status' => 'pending',
+    ]);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Lilies', 'quantity' => 5, 'unit_price' => 3.00]);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Roses', 'quantity' => 12, 'unit_price' => 1.00]);
+
+    $content = $this->actingAs($admin)
+        ->get(route('admin.reports.export', ['sort' => 'quantity', 'direction' => 'desc']))
+        ->streamedContent();
+
+    $path = tempnam(sys_get_temp_dir(), 'report');
+    file_put_contents($path, $content);
+    $sheet = IOFactory::load($path)->getActiveSheet();
+    unlink($path);
+
+    expect($sheet->getCell('B6')->getValue())->toBe('Roses')
+        ->and($sheet->getCell('B7')->getValue())->toBe('Lilies');
+});
+
+test('the inventory can be sorted by the selected column', function (array $query, array $expectedOrder) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    InventoryItem::create(['flower_type' => 'Lilies', 'quantity' => 18, 'unit_price' => 3.25, 'date_received' => '2026-09-20', 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    InventoryItem::create(['flower_type' => 'Orchids', 'quantity' => 4, 'unit_price' => 4.75, 'date_received' => '2026-09-10', 'shelf_life_days' => 30, 'low_stock_threshold' => 3]);
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 9, 'unit_price' => 1.80, 'date_received' => '2026-09-25', 'shelf_life_days' => 3, 'low_stock_threshold' => 8]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.inventory', $query))
+        ->assertOk()
+        ->assertSeeInOrder($expectedOrder);
+})->with([
+    'flower by default' => [[], ['Lilies', 'Orchids', 'Tulips']],
+    'quantity descending' => [['sort' => 'quantity', 'direction' => 'desc'], ['Lilies', 'Tulips', 'Orchids']],
+    'received newest first' => [['sort' => 'date_received', 'direction' => 'desc'], ['Tulips', 'Lilies', 'Orchids']],
+    'spoiling soonest first' => [['sort' => 'spoilage_date', 'direction' => 'asc'], ['Lilies', 'Tulips', 'Orchids']],
+    'unknown column falls back to flower' => [['sort' => 'unit_price'], ['Lilies', 'Orchids', 'Tulips']],
+]);
+
 test('non administrators cannot access operations', function () {
     $this->actingAs(User::factory()->create(['role' => 'staff']))
         ->get(route('admin.operations'))

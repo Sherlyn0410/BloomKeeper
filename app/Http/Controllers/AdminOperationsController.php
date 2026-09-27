@@ -9,7 +9,6 @@ use App\Models\PurchaseOrder;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -27,8 +26,20 @@ class AdminOperationsController extends Controller
 
     public function inventory(Request $request): View
     {
+        $sortableColumns = [
+            'flower_type' => fn (InventoryItem $item): string => strtolower($item->flower_type),
+            'quantity' => fn (InventoryItem $item): int => $item->quantity,
+            'date_received' => fn (InventoryItem $item): int => $item->date_received->timestamp,
+            'spoilage_date' => fn (InventoryItem $item): int => $item->date_received->copy()->addDays($item->shelf_life_days)->timestamp,
+        ];
+        $sort = array_key_exists($request->query('sort'), $sortableColumns) ? $request->query('sort') : 'flower_type';
+        $direction = $request->query('direction') === 'desc' ? 'desc' : 'asc';
+
         return view('admin.inventory', [
-            'inventory' => InventoryItem::query()->orderBy('flower_type')->get(),
+            'inventory' => InventoryItem::query()->orderBy('flower_type')->get()
+                ->sortBy($sortableColumns[$sort], SORT_REGULAR, $direction === 'desc')->values(),
+            'sort' => $sort,
+            'direction' => $direction,
         ]);
     }
 
@@ -54,9 +65,7 @@ class AdminOperationsController extends Controller
 
     public function reports(Request $request): View
     {
-        return view('admin.reports', [
-            'report' => $this->report($request),
-        ]);
+        return view('admin.reports', $this->salesReport($request));
     }
 
     public function storeInventory(Request $request): RedirectResponse
@@ -119,18 +128,7 @@ class AdminOperationsController extends Controller
 
     public function exportReport(Request $request): StreamedResponse
     {
-        $rows = $this->report($request);
-        $unitPrices = InventoryItem::query()->orderBy('date_received')->pluck('unit_price', 'flower_type');
-        $totalQuantity = (int) $rows->sum('quantity');
-
-        $from = $request->filled('from') ? $request->date('from')->format('d M Y') : null;
-        $to = $request->filled('to') ? $request->date('to')->format('d M Y') : null;
-        $reportPeriod = match (true) {
-            $from && $to => "{$from} to {$to}",
-            (bool) $from => "From {$from}",
-            (bool) $to => "Up to {$to}",
-            default => 'All dates',
-        };
+        ['rows' => $rows, 'totalQuantity' => $totalQuantity, 'totalSales' => $totalSales, 'reportPeriod' => $reportPeriod] = $this->salesReport($request);
 
         $spreadsheet = new Spreadsheet;
         $spreadsheet->getDefaultStyle()->getFont()->setSize(14);
@@ -151,26 +149,20 @@ class AdminOperationsController extends Controller
         $sheet->getStyle('A5:F5')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D5E4E1');
 
         $rowNumber = 6;
-        $totalSales = 0.0;
 
-        foreach ($rows->values() as $index => $row) {
-            $quantity = (int) $row->quantity;
-            $unitPrice = (float) ($unitPrices[$row->flower_type] ?? 0);
-            $sales = round($quantity * $unitPrice, 2);
-            $totalSales += $sales;
-
+        foreach ($rows as $index => $row) {
             $sheet->fromArray([
                 $index + 1,
-                $row->flower_type,
-                $quantity,
-                $unitPrice,
-                $sales,
-                $totalQuantity > 0 ? $quantity / $totalQuantity : 0,
+                $row['flower_type'],
+                $row['quantity'],
+                $row['unit_price'],
+                $row['total_sales'],
+                $row['share'],
             ], null, "A{$rowNumber}");
             $rowNumber++;
         }
 
-        $sheet->fromArray([null, 'Total', $totalQuantity, null, round($totalSales, 2), $totalQuantity > 0 ? 1 : 0], null, "A{$rowNumber}");
+        $sheet->fromArray([null, 'Total', $totalQuantity, null, $totalSales, $totalQuantity > 0 ? 1 : 0], null, "A{$rowNumber}");
         $sheet->getStyle("A{$rowNumber}:F{$rowNumber}")->getFont()->setBold(true);
 
         $sheet->getStyle("D6:E{$rowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
@@ -187,11 +179,55 @@ class AdminOperationsController extends Controller
         ]);
     }
 
-    private function report(Request $request): Collection
+    /**
+     * Build the sales report for the requested collection-date range, excluding cancelled orders.
+     *
+     * @return array{rows: array<int, array{flower_type: string, quantity: int, unit_price: float, total_sales: float, share: float}>, totalQuantity: int, totalSales: float, reportPeriod: string, sort: string, direction: string}
+     */
+    private function salesReport(Request $request): array
     {
-        return OrderItem::query()->select('flower_type', DB::raw('SUM(quantity) as quantity'))
-            ->when($request->filled('from'), fn ($query) => $query->whereHas('order', fn ($order) => $order->whereDate('collection_date', '>=', $request->date('from'))))
-            ->when($request->filled('to'), fn ($query) => $query->whereHas('order', fn ($order) => $order->whereDate('collection_date', '<=', $request->date('to'))))
+        $quantities = OrderItem::query()->select('flower_type', DB::raw('SUM(quantity) as quantity'))
+            ->whereHas('order', fn ($order) => $order
+                ->where('status', '!=', 'cancelled')
+                ->when($request->filled('from'), fn ($query) => $query->whereDate('collection_date', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($query) => $query->whereDate('collection_date', '<=', $request->date('to'))))
             ->groupBy('flower_type')->orderBy('flower_type')->get();
+
+        $unitPrices = InventoryItem::query()->orderBy('date_received')->pluck('unit_price', 'flower_type');
+        $totalQuantity = (int) $quantities->sum('quantity');
+
+        $rows = $quantities->map(function (OrderItem $item) use ($unitPrices, $totalQuantity): array {
+            $quantity = (int) $item->quantity;
+            $unitPrice = (float) ($unitPrices[$item->flower_type] ?? 0);
+
+            return [
+                'flower_type' => $item->flower_type,
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'total_sales' => round($quantity * $unitPrice, 2),
+                'share' => $totalQuantity > 0 ? $quantity / $totalQuantity : 0.0,
+            ];
+        });
+
+        $sort = in_array($request->query('sort'), ['flower_type', 'quantity', 'total_sales'], true) ? $request->query('sort') : 'flower_type';
+        $direction = $request->query('direction') === 'desc' ? 'desc' : 'asc';
+        $rows = $rows->sortBy($sort, SORT_NATURAL | SORT_FLAG_CASE, $direction === 'desc')->values()->all();
+
+        $from = $request->filled('from') ? $request->date('from')->format('d M Y') : null;
+        $to = $request->filled('to') ? $request->date('to')->format('d M Y') : null;
+
+        return [
+            'rows' => $rows,
+            'totalQuantity' => $totalQuantity,
+            'totalSales' => round(array_sum(array_column($rows, 'total_sales')), 2),
+            'reportPeriod' => match (true) {
+                $from && $to => "{$from} to {$to}",
+                (bool) $from => "From {$from}",
+                (bool) $to => "Up to {$to}",
+                default => 'All dates',
+            },
+            'sort' => $sort,
+            'direction' => $direction,
+        ];
     }
 }

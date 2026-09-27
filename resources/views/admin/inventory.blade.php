@@ -39,11 +39,11 @@
             <table class="w-full min-w-[900px] text-left text-sm">
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                     <tr>
-                        <th class="px-3 pb-3">Flower</th>
-                        <th class="px-3 pb-3">Quantity</th>
+                        <x-admin.sort-header column="flower_type" :sort="$sort" :direction="$direction" class="px-3">Flower</x-admin.sort-header>
+                        <x-admin.sort-header column="quantity" :sort="$sort" :direction="$direction" class="px-3">Quantity</x-admin.sort-header>
                         <th class="px-3 pb-3">Unit price</th>
-                        <th class="px-3 pb-3">Received</th>
-                        <th class="px-3 pb-3">Shelf life</th>
+                        <x-admin.sort-header column="date_received" :sort="$sort" :direction="$direction" default-direction="desc" class="px-3">Received</x-admin.sort-header>
+                        <x-admin.sort-header column="spoilage_date" :sort="$sort" :direction="$direction" class="px-3">Shelf life</x-admin.sort-header>
                         <th class="px-3 pb-3 text-right">Actions</th>
                     </tr>
                 </thead>
