@@ -48,7 +48,7 @@
                         <div class="mt-6 overflow-hidden">
                             <table class="w-full table-fixed text-left text-sm">
                                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
-                                    <tr><th class="pb-3 font-medium">Customer</th><th class="pb-3 font-medium">Items</th><th class="pb-3 font-medium">Date</th><th class="pb-3 font-medium">Status</th></tr>
+                                    <tr><th class="w-3/10 pb-3 font-medium">Customer</th><th class="w-4/10 pb-3 font-medium">Items</th><th class="pb-3 font-medium">Date</th><th class="pb-3 font-medium">Status</th></tr>
                                 </thead>
                                 <tbody class="divide-y divide-[#dce9e6]">
                                     @foreach ($recentOrders as $order)
@@ -68,13 +68,24 @@
                         <h2 class="font-serif text-2xl font-bold">Quick alerts</h2>
                         <div class="mt-5 space-y-3">
                             @forelse ($recentInventoryAlerts as $alert)
-                                <div class="rounded-2xl bg-white/70 p-3">
-                                    <p class="font-semibold">{{ $alert->flower_type }}</p>
-                                    <p class="mt-1 text-sm text-[#607a72]">
-                                        @if ($alert->quantity <= $alert->low_stock_threshold)
-                                            Low stock: {{ $alert->quantity }} remaining
+                                @php
+                                    $isLowStock = $alert->quantity <= $alert->low_stock_threshold;
+                                    $cardBg = $isLowStock ? 'bg-[#fff8ec]' : 'bg-[#fbeae7]';
+                                    $badgeBg = $isLowStock ? 'bg-[#fff0d5]' : 'bg-[#f5dcd7]';
+                                    $textColor = $isLowStock ? 'text-[#a76513]' : 'text-[#b84331]';
+                                @endphp
+                                <div class="rounded-2xl {{ $cardBg }} p-3">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <p class="font-semibold text-[#1c2e28]">{{ $alert->flower_type }}</p>
+                                        <span class="shrink-0 rounded-full {{ $badgeBg }} px-2.5 py-1 text-xs font-semibold {{ $textColor }}">
+                                            {{ $isLowStock ? 'Low stock' : 'Spoilage' }}
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-sm {{ $textColor }}">
+                                        @if ($isLowStock)
+                                            {{ $alert->quantity }} remaining
                                         @else
-                                            Spoilage check due: {{ $alert->date_received->copy()->addDays($alert->shelf_life_days)->format('d M Y') }}
+                                            Check by {{ $alert->date_received->copy()->addDays($alert->shelf_life_days)->format('d M Y') }}
                                         @endif
                                     </p>
                                 </div>

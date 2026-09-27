@@ -12,6 +12,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminOperationsController extends Controller
@@ -116,17 +120,70 @@ class AdminOperationsController extends Controller
     public function exportReport(Request $request): StreamedResponse
     {
         $rows = $this->report($request);
+        $unitPrices = InventoryItem::query()->orderBy('date_received')->pluck('unit_price', 'flower_type');
+        $totalQuantity = (int) $rows->sum('quantity');
 
-        return response()->streamDownload(function () use ($rows): void {
-            $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['Flower type', 'Quantity ordered']);
-            foreach ($rows as $row) {
-                fputcsv($handle, [$row->flower_type, $row->quantity]);
-            }
-            fclose($handle);
-        }, 'bloomkeeper-report.csv', [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="bloomkeeper-report.csv"',
+        $from = $request->filled('from') ? $request->date('from')->format('d M Y') : null;
+        $to = $request->filled('to') ? $request->date('to')->format('d M Y') : null;
+        $reportPeriod = match (true) {
+            $from && $to => "{$from} to {$to}",
+            (bool) $from => "From {$from}",
+            (bool) $to => "Up to {$to}",
+            default => 'All dates',
+        };
+
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getDefaultStyle()->getFont()->setSize(14);
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Sales Report');
+
+        $sheet->setCellValue('A1', 'BloomKeeper Flower Demand Report');
+        $sheet->setCellValue('A2', "Report Period: {$reportPeriod}");
+        $sheet->setCellValue('A3', 'Generated on: '.now('Asia/Kuala_Lumpur')->format('d M Y, h:i A').' (MYT)');
+        $sheet->mergeCells('A1:F1');
+        $sheet->mergeCells('A2:F2');
+        $sheet->mergeCells('A3:F3');
+        $sheet->getStyle('A1')->getFont()->setBold(true);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        $sheet->fromArray(['No.', 'Flower Type', 'Quantity Ordered', 'Unit Price (RM)', 'Total Sales (RM)', '% of Total Qty'], null, 'A5');
+        $sheet->getStyle('A5:F5')->getFont()->setBold(true);
+        $sheet->getStyle('A5:F5')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D5E4E1');
+
+        $rowNumber = 6;
+        $totalSales = 0.0;
+
+        foreach ($rows->values() as $index => $row) {
+            $quantity = (int) $row->quantity;
+            $unitPrice = (float) ($unitPrices[$row->flower_type] ?? 0);
+            $sales = round($quantity * $unitPrice, 2);
+            $totalSales += $sales;
+
+            $sheet->fromArray([
+                $index + 1,
+                $row->flower_type,
+                $quantity,
+                $unitPrice,
+                $sales,
+                $totalQuantity > 0 ? $quantity / $totalQuantity : 0,
+            ], null, "A{$rowNumber}");
+            $rowNumber++;
+        }
+
+        $sheet->fromArray([null, 'Total', $totalQuantity, null, round($totalSales, 2), $totalQuantity > 0 ? 1 : 0], null, "A{$rowNumber}");
+        $sheet->getStyle("A{$rowNumber}:F{$rowNumber}")->getFont()->setBold(true);
+
+        $sheet->getStyle("D6:E{$rowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle("F6:F{$rowNumber}")->getNumberFormat()->setFormatCode('0.00%');
+
+        foreach (range('A', 'F') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        return response()->streamDownload(function () use ($spreadsheet): void {
+            (new Xlsx($spreadsheet))->save('php://output');
+        }, 'bloomkeeper-report.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
 

@@ -8,7 +8,7 @@
                 <h2 class="font-serif text-2xl font-bold">Sales report</h2>
                 <p class="mt-1 text-sm text-[#607a72]">See the total quantity ordered for each flower type.</p>
             </div>
-            <a href="{{ route('admin.reports.export', request()->query()) }}" class="rounded-lg bg-[#285443] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#1f4435]">Export CSV</a>
+            <a href="{{ route('admin.reports.export', request()->query()) }}" class="rounded-lg bg-[#285443] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#1f4435]">Export Excel</a>
         </div>
         <form class="mt-5 flex flex-wrap gap-2">
             <label class="flex flex-col gap-1 text-xs font-semibold text-[#49665f]">From<input name="from" value="{{ request('from') }}" type="date" class="rounded-lg border-0 p-2 text-sm font-normal"></label>

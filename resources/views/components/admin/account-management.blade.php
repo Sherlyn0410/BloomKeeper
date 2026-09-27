@@ -30,7 +30,13 @@
     </div>
 
     <div class="mt-5 overflow-x-auto">
-        <table class="w-full min-w-[760px] text-left text-sm">
+        <table class="w-full min-w-[760px] table-fixed text-left text-sm">
+            <colgroup>
+                <col class="w-[38%]">
+                <col class="w-[16%]">
+                <col class="w-[16%]">
+                <col class="w-[30%]">
+            </colgroup>
             <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                 <tr>
                     <th class="px-3 pb-4 font-medium">User</th>
@@ -51,9 +57,9 @@
                         ];
                     @endphp
                     <tr>
-                        <td class="px-3 py-5 font-semibold">
+                        <td class="truncate px-3 py-5 font-semibold">
                             {{ $user->name }}
-                            <span class="block text-xs font-normal text-[#607a72]">{{ $user->email }}</span>
+                            <span class="block truncate text-xs font-normal text-[#607a72]">{{ $user->email }}</span>
                         </td>
                         <td class="px-3 py-5 text-[#607a72]">{{ $user->created_at->format('d M Y') }}</td>
                         <td class="px-3 py-5">
@@ -94,53 +100,59 @@
                                 onclick="document.getElementById('edit-user-{{ $user->id }}').showModal()"
                             >Edit account</button>
 
-                            <dialog id="edit-user-{{ $user->id }}" class="fixed left-1/2 top-1/2 m-0 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[24px] p-0 backdrop:bg-[#1c2e28]/40">
-                                <form method="POST" action="{{ route('admin.users.update', $user) }}" class="p-6 text-left">
-                                    @csrf @method('PUT')
-                                    <input type="hidden" name="role" value="{{ $accountRole }}">
+                            <dialog
+                                id="edit-user-{{ $user->id }}"
+                                aria-labelledby="edit-user-title-{{ $user->id }}"
+                                class="fixed left-1/2 top-1/2 m-0 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[24px] bg-white p-0 backdrop:bg-[#1c2e28]/40"
+                            >
+                                <div class="max-h-[calc(100vh-2rem)] overflow-y-auto p-6 sm:p-8">
+                                    <form method="POST" action="{{ route('admin.users.update', $user) }}" class="text-left">
+                                        @csrf @method('PUT')
+                                        <input type="hidden" name="role" value="{{ $accountRole }}">
 
-                                    <div class="flex items-start justify-between gap-4">
-                                        <div>
-                                            <h3 class="font-serif text-xl font-bold text-[#1c2e28]">Edit account</h3>
-                                            <p class="mt-1 text-sm text-[#607a72]">Update {{ $user->name }}'s details.</p>
+                                        <div class="flex items-start justify-between gap-4">
+                                            <div>
+                                                <h3 id="edit-user-title-{{ $user->id }}" class="font-serif text-xl font-bold text-[#1c2e28]">Edit account</h3>
+                                                <p class="mt-1 text-sm text-[#607a72]">Update {{ $user->name }}'s details.</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                aria-label="Close"
+                                                class="cursor-pointer rounded-full p-1.5 text-[#607a72] hover:bg-[#edf7f5]"
+                                                onclick="document.getElementById('edit-user-{{ $user->id }}').close()"
+                                            >&#10005;</button>
                                         </div>
-                                        <button
-                                            type="button"
-                                            aria-label="Close"
-                                            class="cursor-pointer rounded-full p-1 text-[#607a72] hover:bg-[#edf7f5]"
-                                            onclick="document.getElementById('edit-user-{{ $user->id }}').close()"
-                                        >&#10005;</button>
-                                    </div>
 
-                                    <div class="mt-5 grid gap-4">
-                                        <label class="grid gap-1 text-sm">
-                                            <span class="font-semibold text-[#1c2e28]">Full name</span>
-                                            <input name="name" value="{{ $user->name }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
-                                        </label>
-                                        <label class="grid gap-1 text-sm">
-                                            <span class="font-semibold text-[#1c2e28]">Email</span>
-                                            <input name="email" type="email" value="{{ $user->email }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
-                                        </label>
+                                        <div class="mt-6 grid gap-4">
+                                            <label class="grid gap-1 text-sm">
+                                                <span class="font-semibold text-[#1c2e28]">Full name</span>
+                                                <input name="name" value="{{ $user->name }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            </label>
+                                            <label class="grid gap-1 text-sm">
+                                                <span class="font-semibold text-[#1c2e28]">Email</span>
+                                                <input name="email" type="email" value="{{ $user->email }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            </label>
 
-                                        <div class="border-t border-[#e5efec] pt-4">
-                                            <p class="text-xs font-semibold uppercase tracking-wide text-[#607a72]">Reset password</p>
-                                            <p class="mt-1 text-xs text-[#8199a2]">Leave both fields blank to keep the current password.</p>
-                                            <div class="mt-3 grid gap-3">
-                                                <input name="password" type="password" placeholder="New password" minlength="8" class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
-                                                <input name="password_confirmation" type="password" placeholder="Confirm new password" minlength="8" class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            <div class="border-t border-[#e5efec] pt-4">
+                                                <p class="text-xs font-semibold uppercase tracking-wide text-[#607a72]">Reset password</p>
+                                                <p class="mt-1 text-xs text-[#8199a2]">Leave both fields blank to keep the current password.</p>
+                                                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                                    <input name="password" type="password" placeholder="New password" minlength="8" class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                                    <input name="password_confirmation" type="password" placeholder="Confirm new password" minlength="8" class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <div class="mt-6 flex justify-end gap-3">
-                                        <button
-                                            type="button"
-                                            class="cursor-pointer rounded-full px-4 py-2 text-sm font-semibold text-[#607a72] hover:bg-[#edf7f5]"
-                                            onclick="document.getElementById('edit-user-{{ $user->id }}').close()"
-                                        >Cancel</button>
-                                        <button class="cursor-pointer rounded-full bg-[#285443] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1c3e32]">Save changes</button>
-                                    </div>
-                                </form>
+                                        <div class="mt-7 flex justify-end gap-3">
+                                            <button
+                                                type="button"
+                                                class="cursor-pointer rounded-full px-4 py-2 text-sm font-semibold text-[#607a72] hover:bg-[#edf7f5]"
+                                                onclick="document.getElementById('edit-user-{{ $user->id }}').close()"
+                                            >Cancel</button>
+                                            <button class="cursor-pointer rounded-full bg-[#285443] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1c3e32]">Save changes</button>
+                                        </div>
+                                    </form>
+                                </div>
                             </dialog>
                         </td>
                     </tr>
