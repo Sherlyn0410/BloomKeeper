@@ -45,13 +45,18 @@ class AdminOperationsController extends Controller
 
     public function orders(Request $request): View
     {
-        $orders = CustomerOrder::query()->with(['items', 'creator'])->latest();
-        $orders->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')));
-        $orders->when($request->filled('customer'), fn ($query) => $query->where('customer_name', 'like', '%'.$request->string('customer').'%'));
-        $orders->when($request->filled('date'), fn ($query) => $query->whereDate('collection_date', $request->date('date')));
+        $orders = CustomerOrder::query()
+            ->when($request->filled('customer'), fn ($query) => $query->where('customer_name', 'like', '%'.$request->string('customer').'%'))
+            ->when($request->filled('date'), fn ($query) => $query->whereDate('collection_date', $request->date('date')));
+
+        $statusCounts = (clone $orders)->select('status', DB::raw('COUNT(*) as total'))->groupBy('status')->pluck('total', 'status');
 
         return view('admin.orders', [
-            'orders' => $orders->get(),
+            'orders' => $orders->with(['items', 'creator'])
+                ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
+                ->latest()
+                ->get(),
+            'statusCounts' => $statusCounts,
         ]);
     }
 

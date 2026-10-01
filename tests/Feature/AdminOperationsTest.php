@@ -155,6 +155,32 @@ test('the inventory can be sorted by the selected column', function (array $quer
     'unknown column falls back to flower' => [['sort' => 'unit_price'], ['Lilies', 'Orchids', 'Tulips']],
 ]);
 
+test('the orders page shows status counts, order totals, and filters by status', function () {
+    $this->travelTo(Carbon::parse('2026-09-27 09:00:00'));
+    $admin = User::factory()->create(['role' => 'admin']);
+    $pendingOrder = CustomerOrder::create([
+        'created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-27', 'status' => 'pending',
+    ]);
+    OrderItem::create(['customer_order_id' => $pendingOrder->id, 'flower_type' => 'Roses', 'quantity' => 4, 'unit_price' => 2.50]);
+    CustomerOrder::create([
+        'created_by' => $admin->id, 'customer_name' => 'Leo Tan', 'collection_date' => '2026-09-20', 'status' => 'completed',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.orders'))
+        ->assertOk()
+        ->assertSeeInOrder(['All', '2', 'Pending', '1', 'Ready', '0', 'Completed', '1'])
+        ->assertSee('RM 10.00')
+        ->assertSee('Today')
+        ->assertSee('Leo Tan');
+
+    $this->actingAs($admin)
+        ->get(route('admin.orders', ['status' => 'pending']))
+        ->assertOk()
+        ->assertSee('Mina Flores')
+        ->assertDontSee('Leo Tan');
+});
+
 test('non administrators cannot access operations', function () {
     $this->actingAs(User::factory()->create(['role' => 'staff']))
         ->get(route('admin.operations'))
