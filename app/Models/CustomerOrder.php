@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 #[Fillable(['order_number', 'created_by', 'customer_id', 'customer_name', 'customer_email', 'customer_phone', 'collection_date', 'collection_time', 'notes', 'status', 'payment_status'])]
 class CustomerOrder extends Model
@@ -39,6 +42,137 @@ class CustomerOrder extends Model
     public function mustBeCancelledInsteadOfDeleted(): bool
     {
         return in_array($this->status, ['ready', 'completed'], true);
+    }
+
+    /**
+     * Make the stock held by this order match its items: active orders hold their flowers, cancelled orders hold none.
+     *
+     * @throws ValidationException when there is not enough stock for the order's flowers.
+     */
+    public function syncStock(User $user): void
+    {
+        DB::transaction(function () use ($user): void {
+            $required = $this->status === 'cancelled'
+                ? collect()
+                : $this->items()->get()->groupBy('flower_type')->map(fn ($items): int => (int) $items->sum('quantity'))->filter();
+
+            if ($required->sortKeys()->all() === $this->heldStock()->sortKeys()->all()) {
+                return;
+            }
+
+            $this->releaseStock($user);
+            $this->reserveStock($user, $required);
+        });
+    }
+
+    /**
+     * Only cancelling or reopening an order moves stock; pending, ready and completed all keep what the order holds.
+     *
+     * @throws ValidationException when a reopened order's flowers are no longer in stock.
+     */
+    public function applyStatusChangeToStock(User $user, string $previousStatus): void
+    {
+        if ($previousStatus !== 'cancelled' && $this->status === 'cancelled') {
+            $this->releaseStock($user);
+        } elseif ($previousStatus === 'cancelled' && $this->status !== 'cancelled') {
+            $this->syncStock($user);
+        }
+    }
+
+    /**
+     * Return every flower this order is holding to the batch it was taken from.
+     */
+    public function releaseStock(User $user): void
+    {
+        DB::transaction(function () use ($user): void {
+            $heldByBatch = $this->stockAdjustments()->get()
+                ->groupBy('inventory_item_id')
+                ->map(fn ($adjustments): int => (int) -$adjustments->sum('quantity_change'))
+                ->filter(fn (int $quantity): bool => $quantity > 0);
+
+            foreach ($heldByBatch as $inventoryItemId => $quantity) {
+                $batch = InventoryItem::query()->lockForUpdate()->find($inventoryItemId);
+
+                if (! $batch) {
+                    continue;
+                }
+
+                $batch->increment('quantity', $quantity);
+                $this->logStockMovement($user, $batch, $quantity, 'Released from order');
+            }
+        });
+    }
+
+    /**
+     * Flowers currently held by this order, keyed by flower type.
+     *
+     * @return Collection<string, int>
+     */
+    public function heldStock(): Collection
+    {
+        return $this->stockAdjustments()->with('inventoryItem')->get()
+            ->groupBy(fn (StockAdjustment $adjustment): string => $adjustment->inventoryItem->flower_type)
+            ->map(fn ($adjustments): int => (int) -$adjustments->sum('quantity_change'))
+            ->filter();
+    }
+
+    /**
+     * Take the required flowers from stock, using the batch that spoils soonest first.
+     *
+     * @param  Collection<string, int>  $required
+     *
+     * @throws ValidationException
+     */
+    private function reserveStock(User $user, Collection $required): void
+    {
+        $batchesByFlower = $required->keys()->mapWithKeys(fn (string $flowerType): array => [
+            $flowerType => InventoryItem::query()->where('flower_type', $flowerType)->where('quantity', '>', 0)
+                ->lockForUpdate()->get()
+                ->sortBy(fn (InventoryItem $batch): int => $batch->spoilageDate()->timestamp)
+                ->values(),
+        ]);
+
+        $shortages = $required
+            ->filter(fn (int $quantity, string $flowerType): bool => $batchesByFlower[$flowerType]->sum('quantity') < $quantity)
+            ->map(function (int $quantity, string $flowerType) use ($batchesByFlower): string {
+                $available = (int) $batchesByFlower[$flowerType]->sum('quantity');
+
+                return "Only {$available} {$flowerType} left in stock, but this order needs {$quantity}.";
+            });
+
+        if ($shortages->isNotEmpty()) {
+            throw ValidationException::withMessages(['items' => $shortages->values()->all()]);
+        }
+
+        foreach ($required as $flowerType => $quantity) {
+            foreach ($batchesByFlower[$flowerType] as $batch) {
+                if ($quantity === 0) {
+                    break;
+                }
+
+                $taken = min($quantity, $batch->quantity);
+                $batch->decrement('quantity', $taken);
+                $this->logStockMovement($user, $batch, -$taken, 'Reserved for order');
+                $quantity -= $taken;
+            }
+        }
+    }
+
+    private function logStockMovement(User $user, InventoryItem $batch, int $quantityChange, string $reason): void
+    {
+        $this->stockAdjustments()->create([
+            'inventory_item_id' => $batch->id,
+            'user_id' => $user->id,
+            'type' => 'order',
+            'quantity_change' => $quantityChange,
+            'unit_cost' => $batch->cost_price,
+            'reason' => "{$reason} {$this->order_number}",
+        ]);
+    }
+
+    public function stockAdjustments(): HasMany
+    {
+        return $this->hasMany(StockAdjustment::class);
     }
 
     public function items(): HasMany
