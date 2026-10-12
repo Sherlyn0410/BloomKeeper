@@ -47,6 +47,7 @@ class StaffOrderController extends Controller
             ]);
 
             $this->saveItems($order, $data['items']);
+            $order->syncStock($request->user());
 
             return $order;
         });
@@ -72,6 +73,7 @@ class StaffOrderController extends Controller
             ]);
 
             $this->saveItems($customerOrder, $data['items']);
+            $customerOrder->syncStock($request->user());
         });
 
         return $this->redirectToOrderList($request)->with('status', "Order {$customerOrder->order_number} has been updated.");
@@ -81,24 +83,31 @@ class StaffOrderController extends Controller
     {
         if ($customerOrder->mustBeCancelledInsteadOfDeleted()) {
             $previousStatus = $customerOrder->status;
-            $customerOrder->update(['status' => 'cancelled']);
+            DB::transaction(function () use ($customerOrder, $request, $previousStatus): void {
+                $customerOrder->update(['status' => 'cancelled']);
+                $customerOrder->applyStatusChangeToStock($request->user(), $previousStatus);
+            });
 
             return $this->redirectToOrderList($request)->with('status', "Order {$customerOrder->order_number} was {$previousStatus}, so it has been cancelled instead of deleted.");
         }
 
-        $customerOrder->delete();
+        DB::transaction(function () use ($customerOrder, $request): void {
+            $customerOrder->releaseStock($request->user());
+            $customerOrder->delete();
+        });
 
         return $this->redirectToOrderList($request)->with('status', "Order {$customerOrder->order_number} has been deleted.");
     }
 
     /**
-     * @return array{customers: EloquentCollection<int, Customer>, flowerTypes: Collection<int, string>}
+     * @return array{customers: EloquentCollection<int, Customer>, flowerStock: Collection<string, int>}
      */
     private function formData(): array
     {
         return [
             'customers' => Customer::query()->orderBy('name')->get(),
-            'flowerTypes' => InventoryItem::query()->distinct()->orderBy('flower_type')->pluck('flower_type'),
+            'flowerStock' => InventoryItem::query()->selectRaw('flower_type, SUM(quantity) as available')
+                ->groupBy('flower_type')->orderBy('flower_type')->pluck('available', 'flower_type'),
         ];
     }
 
@@ -164,14 +173,16 @@ class StaffOrderController extends Controller
     }
 
     /**
-     * Replace the order's items, keeping the original price for flowers already on the order.
+     * Replace the order's items, keeping the original price and cost for flowers already on the order.
      *
      * @param  array<int, array{flower_type: string, quantity: int|string}>  $items
      */
     private function saveItems(CustomerOrder $order, array $items): void
     {
         $existingPrices = $order->items()->pluck('unit_price', 'flower_type');
+        $existingCosts = $order->items()->pluck('unit_cost', 'flower_type');
         $currentPrices = InventoryItem::query()->orderBy('date_received')->pluck('unit_price', 'flower_type');
+        $currentCosts = InventoryItem::query()->orderBy('date_received')->pluck('cost_price', 'flower_type');
 
         $order->items()->delete();
 
@@ -180,6 +191,7 @@ class StaffOrderController extends Controller
                 'flower_type' => $item['flower_type'],
                 'quantity' => $item['quantity'],
                 'unit_price' => $existingPrices[$item['flower_type']] ?? $currentPrices[$item['flower_type']] ?? 0,
+                'unit_cost' => $existingCosts[$item['flower_type']] ?? $currentCosts[$item['flower_type']] ?? 0,
             ]);
         }
     }

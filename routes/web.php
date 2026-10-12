@@ -109,5 +109,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
         Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->name('purchase-orders.status');
         Route::get('/reports/export', [AdminOperationsController::class, 'exportReport'])->name('reports.export');
+        Route::get('/reports/wastage', [AdminOperationsController::class, 'wastageReports'])->name('reports.wastage');
+        Route::get('/reports/wastage/export', [AdminOperationsController::class, 'exportWastageReport'])->name('reports.wastage.export');
     });
 });

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['inventory_item_id', 'user_id', 'type', 'quantity_change', 'reason', 'notes'])]
+#[Fillable(['inventory_item_id', 'user_id', 'customer_order_id', 'type', 'quantity_change', 'unit_cost', 'reason', 'notes'])]
 class StockAdjustment extends Model
 {
     public function inventoryItem(): BelongsTo
@@ -14,8 +14,18 @@ class StockAdjustment extends Model
         return $this->belongsTo(InventoryItem::class);
     }
 
+    public function customerOrder(): BelongsTo
+    {
+        return $this->belongsTo(CustomerOrder::class);
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    protected function casts(): array
+    {
+        return ['unit_cost' => 'decimal:2'];
     }
 }

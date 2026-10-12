@@ -66,28 +66,77 @@ test('the admin wastage history filters by date range', function () {
     $this->actingAs($this->staff)->get(route('admin.wastage'))->assertForbidden();
 });
 
-test('reports and the excel export include wastage by flower valued at cost price', function () {
+test('the wastage report shows wastage by flower and reason valued at cost price', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $this->travelTo('2026-10-05 10:00:00');
+    $this->item->recordWastage($this->staff, 4, 'expired');
+    $this->item->recordWastage($this->staff, 2, 'damaged');
+    $this->travelTo('2026-09-05 10:00:00');
+    $this->item->recordWastage($this->staff, 1, 'other', 'Outside the period');
+
+    $this->actingAs($admin)
+        ->get(route('admin.reports.wastage', ['from' => '2026-10-01', 'to' => '2026-10-31']))
+        ->assertOk()
+        ->assertSee('Wastage report')
+        ->assertSee('RM 9.00')
+        ->assertSeeInOrder(['Lilies', '4', '2', '0', '6', '9.00', '100.00%']);
+
+    $this->actingAs($this->staff)->get(route('admin.reports.wastage'))->assertForbidden();
+});
+
+test('wastage value uses the cost saved when it was recorded', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $this->item->recordWastage($this->staff, 4, 'expired');
+    $this->item->update(['cost_price' => 9.00]);
+
+    expect(StockAdjustment::sole()->unit_cost)->toBe('1.50');
+
+    $this->actingAs($admin)->get(route('admin.reports.wastage'))->assertSee('RM 6.00')->assertDontSee('RM 36.00');
+});
+
+test('the sales report page no longer includes the wastage table', function () {
+    $this->actingAs(User::factory()->create(['role' => 'admin']))
+        ->get(route('admin.reports'))
+        ->assertOk()
+        ->assertSee('Sales report')
+        ->assertDontSee('Value lost');
+});
+
+test('the wastage report exports its own excel file', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $this->travelTo('2026-10-05 10:00:00');
     $this->item->recordWastage($this->staff, 4, 'expired');
 
-    $this->actingAs($admin)
-        ->get(route('admin.reports', ['from' => '2026-10-01', 'to' => '2026-10-31']))
-        ->assertOk()
-        ->assertSee('Wastage by flower')
-        ->assertSeeInOrder(['Lilies', '4', '6.00']);
+    $response = $this->actingAs($admin)->get(route('admin.reports.wastage.export', ['from' => '2026-10-01', 'to' => '2026-10-31']));
+    $response->assertDownload('bloomkeeper-wastage-report.xlsx');
 
-    $content = $this->actingAs($admin)
-        ->get(route('admin.reports.export', ['from' => '2026-10-01', 'to' => '2026-10-31']))
+    $path = tempnam(sys_get_temp_dir(), 'report');
+    file_put_contents($path, $response->streamedContent());
+    $spreadsheet = IOFactory::load($path);
+    unlink($path);
+    $sheet = $spreadsheet->getActiveSheet();
+
+    expect($spreadsheet->getSheetCount())->toBe(1)
+        ->and($sheet->getCell('A1')->getValue())->toBe('BloomKeeper Wastage Report')
+        ->and($sheet->getCell('A2')->getValue())->toBe('Report Period: 01 Oct 2026 to 31 Oct 2026')
+        ->and($sheet->rangeToArray('A5:H5')[0])->toBe(['No.', 'Flower Type', 'Expired', 'Damaged', 'Other', 'Total Removed', 'Value Lost (RM)', '% of Wastage'])
+        ->and($sheet->getCell('B6')->getValue())->toBe('Lilies')
+        ->and($sheet->getCell('C6')->getValue())->toBe(4)
+        ->and($sheet->getCell('F6')->getValue())->toBe(4)
+        ->and($sheet->getCell('G6')->getValue())->toEqual(6.0)
+        ->and($sheet->getCell('B7')->getValue())->toBe('Total');
+});
+
+test('the sales export only contains the sales sheet', function () {
+    $content = $this->actingAs(User::factory()->create(['role' => 'admin']))
+        ->get(route('admin.reports.export'))
         ->streamedContent();
 
     $path = tempnam(sys_get_temp_dir(), 'report');
     file_put_contents($path, $content);
-    $sheet = IOFactory::load($path)->getSheetByName('Wastage');
+    $spreadsheet = IOFactory::load($path);
     unlink($path);
 
-    expect($sheet)->not->toBeNull()
-        ->and($sheet->getCell('B5')->getValue())->toBe('Lilies')
-        ->and($sheet->getCell('C5')->getValue())->toBe(4)
-        ->and($sheet->getCell('D5')->getValue())->toEqual(6.0);
+    expect($spreadsheet->getSheetCount())->toBe(1)
+        ->and($spreadsheet->getActiveSheet()->getTitle())->toBe('Sales Report');
 });

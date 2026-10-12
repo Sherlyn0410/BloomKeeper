@@ -36,6 +36,7 @@ class CustomerOrderSeeder extends Seeder
         ]);
 
         $unitPrices = InventoryItem::query()->orderBy('date_received')->pluck('unit_price', 'flower_type');
+        $unitCosts = InventoryItem::query()->orderBy('date_received')->pluck('cost_price', 'flower_type');
 
         $orders = [
             ['customer' => 'Aisha Rahman', 'collection_date' => Carbon::today()->addDay(), 'collection_time' => '10:30', 'status' => 'pending', 'payment_status' => 'paid',
@@ -88,6 +89,7 @@ class CustomerOrderSeeder extends Seeder
                         'flower_type' => $flowerType,
                         'quantity' => $quantity,
                         'unit_price' => $unitPrices[$flowerType] ?? 0,
+                        'unit_cost' => $unitCosts[$flowerType] ?? 0,
                     ]);
                 }
             }

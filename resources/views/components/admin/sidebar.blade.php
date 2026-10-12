@@ -14,7 +14,10 @@
             ['label' => 'Customers', 'route' => 'staff.customers.index', 'active' => request()->routeIs('staff.customers.*')],
         ]],
         ['label' => 'Purchase Orders', 'route' => 'admin.purchase-orders', 'active' => request()->routeIs('admin.purchase-orders')],
-        ['label' => 'Reports', 'route' => 'admin.reports', 'active' => request()->routeIs('admin.reports')],
+        ['label' => 'Reports', 'children' => [
+            ['label' => 'Sales report', 'route' => 'admin.reports', 'active' => request()->routeIs('admin.reports', 'admin.reports.export')],
+            ['label' => 'Wastage report', 'route' => 'admin.reports.wastage', 'active' => request()->routeIs('admin.reports.wastage*')],
+        ]],
         ['label' => 'Manage Users', 'children' => [
             ['label' => 'Staff', 'route' => 'admin.users', 'params' => ['role' => 'staff'], 'active' => $usersRole === 'staff'],
             ['label' => 'Suppliers', 'route' => 'admin.users', 'params' => ['role' => 'supplier'], 'active' => $usersRole === 'supplier'],

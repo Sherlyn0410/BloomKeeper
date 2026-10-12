@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['customer_order_id', 'flower_type', 'quantity', 'unit_price'])]
+#[Fillable(['customer_order_id', 'flower_type', 'quantity', 'unit_price', 'unit_cost'])]
 class OrderItem extends Model
 {
     public function order(): BelongsTo
@@ -16,6 +16,6 @@ class OrderItem extends Model
 
     protected function casts(): array
     {
-        return ['unit_price' => 'decimal:2'];
+        return ['unit_price' => 'decimal:2', 'unit_cost' => 'decimal:2'];
     }
 }

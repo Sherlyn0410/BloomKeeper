@@ -52,6 +52,7 @@ class InventoryItem extends Model
                 'user_id' => $user->id,
                 'type' => 'wastage',
                 'quantity_change' => -$quantity,
+                'unit_cost' => $item->cost_price,
                 'reason' => $reason,
                 'notes' => $notes,
             ]);

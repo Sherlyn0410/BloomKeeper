@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Customer;
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
 use App\Models\OrderItem;
@@ -45,8 +46,8 @@ test('the exported sales report includes a header, sales figures, and a total ro
     $order = CustomerOrder::create([
         'created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-23', 'status' => 'pending',
     ]);
-    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Tulips', 'quantity' => 12, 'unit_price' => 1.25]);
-    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Roses', 'quantity' => 4, 'unit_price' => 2.00]);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Tulips', 'quantity' => 12, 'unit_price' => 1.25, 'unit_cost' => 0.75]);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Roses', 'quantity' => 4, 'unit_price' => 2.00, 'unit_cost' => 1.00]);
 
     $this->travelTo(Carbon::parse('2026-09-27 06:30:00', 'UTC'));
 
@@ -60,16 +61,16 @@ test('the exported sales report includes a header, sales figures, and a total ro
     unlink($path);
 
     expect($sheet->getCell('A1')->getValue())->toBe('BloomKeeper Flower Demand Report')
-        ->and($sheet->getMergeCells())->toContain('A1:F1')
+        ->and($sheet->getMergeCells())->toContain('A1:H1')
         ->and($sheet->getStyle('A1')->getFont()->getSize())->toEqual(14)
         ->and($sheet->getStyle('C6')->getFont()->getSize())->toEqual(14)
         ->and($sheet->getCell('A2')->getValue())->toBe('Report Period: 01 Sep 2026 to 30 Sep 2026')
         ->and($sheet->getCell('A3')->getValue())->toBe('Generated on: 27 Sep 2026, 02:30 PM (MYT)')
-        ->and($sheet->rangeToArray('A5:F5')[0])->toBe(['No.', 'Flower Type', 'Quantity Ordered', 'Unit Price (RM)', 'Total Sales (RM)', '% of Total Qty'])
-        ->and($sheet->rangeToArray('A6:F8'))->toBe([
-            ['1', 'Roses', '4', '2.50', '10.00', '25.00%'],
-            ['2', 'Tulips', '12', '1.50', '18.00', '75.00%'],
-            [null, 'Total', '16', null, '28.00', '100.00%'],
+        ->and($sheet->rangeToArray('A5:H5')[0])->toBe(['No.', 'Flower Type', 'Quantity Ordered', 'Total Sales (RM)', 'Total Cost (RM)', 'Gross Profit (RM)', 'Margin', '% of Total Qty'])
+        ->and($sheet->rangeToArray('A6:H8'))->toBe([
+            ['1', 'Roses', '4', '8.00', '4.00', '4.00', '50.00%', '25.00%'],
+            ['2', 'Tulips', '12', '15.00', '9.00', '6.00', '40.00%', '75.00%'],
+            [null, 'Total', '16', '23.00', '13.00', '10.00', '43.48%', '100.00%'],
         ])
         ->and($sheet->getStyle('B8')->getFont()->getBold())->toBeTrue();
 });
@@ -226,6 +227,65 @@ test('marking a purchase order fulfilled records when it happened', function () 
 
     $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'cancelled']);
     expect($purchaseOrder->refresh()->fulfilled_at)->toBeNull();
+});
+
+test('sales use the price saved on each order, not the current inventory price', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $roses = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 50, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => '2026-09-20', 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $firstOrder = CustomerOrder::create(['created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-23', 'status' => 'completed']);
+    OrderItem::create(['customer_order_id' => $firstOrder->id, 'flower_type' => 'Roses', 'quantity' => 4, 'unit_price' => 2.00]);
+    $secondOrder = CustomerOrder::create(['created_by' => $admin->id, 'customer_name' => 'Leo Tan', 'collection_date' => '2026-09-24', 'status' => 'pending']);
+    OrderItem::create(['customer_order_id' => $secondOrder->id, 'flower_type' => 'Roses', 'quantity' => 6, 'unit_price' => 3.00]);
+
+    $roses->update(['unit_price' => 9.99]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.reports'))
+        ->assertOk()
+        ->assertSee('RM 26.00')
+        ->assertSeeInOrder(['Roses', '10', '26.00'])
+        ->assertDontSee('9.99');
+});
+
+test('the sales report shows cost and profit from the cost saved on each order', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $roses = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 50, 'unit_price' => 2.50, 'cost_price' => 1.00, 'date_received' => '2026-09-20', 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $order = CustomerOrder::create(['created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-23', 'status' => 'completed']);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Roses', 'quantity' => 10, 'unit_price' => 2.50, 'unit_cost' => 1.00]);
+
+    $roses->update(['cost_price' => 2.40]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.reports'))
+        ->assertOk()
+        ->assertSee('Gross profit')
+        ->assertSee('RM 15.00')
+        ->assertSee('60.0% margin')
+        ->assertSeeInOrder(['Roses', '10', '25.00', '10.00', '15.00', '60.0%']);
+});
+
+test('the sales report can be sorted by profit', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = CustomerOrder::create(['created_by' => $admin->id, 'customer_name' => 'Mina Flores', 'collection_date' => '2026-09-23', 'status' => 'completed']);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Lilies', 'quantity' => 2, 'unit_price' => 3.00, 'unit_cost' => 1.00]);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Roses', 'quantity' => 10, 'unit_price' => 2.50, 'unit_cost' => 1.00]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.reports', ['sort' => 'profit', 'direction' => 'desc']))
+        ->assertSeeInOrder(['Roses', 'Lilies']);
+});
+
+test('placing an order saves the current cost price on each line', function () {
+    $staff = User::factory()->create(['role' => 'staff']);
+    $customer = Customer::factory()->create(['created_by' => $staff->id]);
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 50, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+
+    $this->actingAs($staff)->post(route('staff.orders.store'), [
+        'customer_id' => $customer->id, 'collection_date' => today()->addDay()->format('Y-m-d'), 'payment_status' => 'paid',
+        'items' => [['flower_type' => 'Roses', 'quantity' => 3]],
+    ])->assertSessionHasNoErrors();
+
+    expect(OrderItem::sole()->unit_cost)->toBe('1.20');
 });
 
 test('non administrators cannot access operations', function () {

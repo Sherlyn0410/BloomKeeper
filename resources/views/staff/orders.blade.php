@@ -20,7 +20,7 @@
                     <a href="{{ route('staff.orders.index') }}" class="bk-btn bk-btn-ghost">Clear</a>
                 @endif
             </form>
-            <a href="{{ route('staff.orders.create') }}" class="bk-btn bk-btn-accent">+ New order</a>
+            <a href="{{ route('staff.orders.create') }}" class="bk-btn bk-btn-accent"><x-icons.plus /> New order</a>
         </div>
 
         <div class="mt-5 space-y-3">

@@ -28,7 +28,7 @@
                     <p class="bk-card-subtitle" id="customer-mode-hint">Choose a saved customer, or add someone new.</p>
                 </div>
                 <button type="button" id="customer-mode-toggle" class="bk-btn bk-btn-secondary">
-                    <svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 3.5a.75.75 0 0 1 .75.75v5h5a.75.75 0 0 1 0 1.5h-5v5a.75.75 0 0 1-1.5 0v-5h-5a.75.75 0 0 1 0-1.5h5v-5A.75.75 0 0 1 10 3.5Z" /></svg>
+                    <x-icons.plus />
                     <span id="customer-mode-label">New customer</span>
                 </button>
             </div>
@@ -103,7 +103,7 @@
         <section class="bk-card">
             <div class="flex items-center justify-between gap-4">
                 <h2 class="bk-card-title">Flowers</h2>
-                <button type="button" id="add-item" class="bk-btn bk-btn-secondary">+ Add flower</button>
+                <button type="button" id="add-item" class="bk-btn bk-btn-secondary"><x-icons.plus /> Add flower</button>
             </div>
 
             <div id="item-rows" class="mt-5 space-y-3">
@@ -113,8 +113,8 @@
                             Flower type
                             <select name="items[{{ $index }}][flower_type]" required class="{{ $inputClass }}">
                                 <option value="">Select a flower</option>
-                                @foreach ($flowerTypes as $flowerType)
-                                    <option value="{{ $flowerType }}" @selected(($item['flower_type'] ?? '') === $flowerType)>{{ $flowerType }}</option>
+                                @foreach ($flowerStock as $flowerType => $available)
+                                    <option value="{{ $flowerType }}" @selected(($item['flower_type'] ?? '') === $flowerType)>{{ $flowerType }} ({{ $available }} in stock)</option>
                                 @endforeach
                             </select>
                         </label>

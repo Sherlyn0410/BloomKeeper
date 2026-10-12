@@ -93,7 +93,12 @@ class AdminOperationsController extends Controller
 
     public function reports(Request $request): View
     {
-        return view('admin.reports', [...$this->salesReport($request), 'wastageRows' => $this->wastageReport($request)]);
+        return view('admin.reports', $this->salesReport($request));
+    }
+
+    public function wastageReports(Request $request): View
+    {
+        return view('admin.reports-wastage', $this->wastageReport($request));
     }
 
     public function storeInventory(Request $request): RedirectResponse
@@ -119,7 +124,13 @@ class AdminOperationsController extends Controller
 
     public function updateOrderStatus(Request $request, CustomerOrder $customerOrder): RedirectResponse
     {
-        $customerOrder->update($request->validate(['status' => ['required', 'in:pending,ready,completed,cancelled']]));
+        $data = $request->validate(['status' => ['required', 'in:pending,ready,completed,cancelled']]);
+
+        DB::transaction(function () use ($customerOrder, $data, $request): void {
+            $previousStatus = $customerOrder->status;
+            $customerOrder->update($data);
+            $customerOrder->applyStatusChangeToStock($request->user(), $previousStatus);
+        });
 
         return back()->with('status', 'Order status updated.');
     }
@@ -152,7 +163,7 @@ class AdminOperationsController extends Controller
 
     public function exportReport(Request $request): StreamedResponse
     {
-        ['rows' => $rows, 'totalQuantity' => $totalQuantity, 'totalSales' => $totalSales, 'reportPeriod' => $reportPeriod] = $this->salesReport($request);
+        ['rows' => $rows, 'totalQuantity' => $totalQuantity, 'totalSales' => $totalSales, 'totalCost' => $totalCost, 'totalProfit' => $totalProfit, 'reportPeriod' => $reportPeriod] = $this->salesReport($request);
 
         $spreadsheet = new Spreadsheet;
         $spreadsheet->getDefaultStyle()->getFont()->setSize(14);
@@ -162,15 +173,15 @@ class AdminOperationsController extends Controller
         $sheet->setCellValue('A1', 'BloomKeeper Flower Demand Report');
         $sheet->setCellValue('A2', "Report Period: {$reportPeriod}");
         $sheet->setCellValue('A3', 'Generated on: '.now('Asia/Kuala_Lumpur')->format('d M Y, h:i A').' (MYT)');
-        $sheet->mergeCells('A1:F1');
-        $sheet->mergeCells('A2:F2');
-        $sheet->mergeCells('A3:F3');
+        $sheet->mergeCells('A1:H1');
+        $sheet->mergeCells('A2:H2');
+        $sheet->mergeCells('A3:H3');
         $sheet->getStyle('A1')->getFont()->setBold(true);
         $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $sheet->fromArray(['No.', 'Flower Type', 'Quantity Ordered', 'Unit Price (RM)', 'Total Sales (RM)', '% of Total Qty'], null, 'A5');
-        $sheet->getStyle('A5:F5')->getFont()->setBold(true);
-        $sheet->getStyle('A5:F5')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D5E4E1');
+        $sheet->fromArray(['No.', 'Flower Type', 'Quantity Ordered', 'Total Sales (RM)', 'Total Cost (RM)', 'Gross Profit (RM)', 'Margin', '% of Total Qty'], null, 'A5');
+        $sheet->getStyle('A5:H5')->getFont()->setBold(true);
+        $sheet->getStyle('A5:H5')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D5E4E1');
 
         $rowNumber = 6;
 
@@ -179,57 +190,84 @@ class AdminOperationsController extends Controller
                 $index + 1,
                 $row['flower_type'],
                 $row['quantity'],
-                $row['unit_price'],
                 $row['total_sales'],
+                $row['total_cost'],
+                $row['profit'],
+                $row['margin'],
                 $row['share'],
             ], null, "A{$rowNumber}");
             $rowNumber++;
         }
 
-        $sheet->fromArray([null, 'Total', $totalQuantity, null, $totalSales, $totalQuantity > 0 ? 1 : 0], null, "A{$rowNumber}");
-        $sheet->getStyle("A{$rowNumber}:F{$rowNumber}")->getFont()->setBold(true);
+        $sheet->fromArray([null, 'Total', $totalQuantity, $totalSales, $totalCost, $totalProfit, $totalSales > 0 ? $totalProfit / $totalSales : 0, $totalQuantity > 0 ? 1 : 0], null, "A{$rowNumber}");
+        $sheet->getStyle("A{$rowNumber}:H{$rowNumber}")->getFont()->setBold(true);
 
-        $sheet->getStyle("D6:E{$rowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
-        $sheet->getStyle("F6:F{$rowNumber}")->getNumberFormat()->setFormatCode('0.00%');
+        $sheet->getStyle("D6:F{$rowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle("G6:H{$rowNumber}")->getNumberFormat()->setFormatCode('0.00%');
 
-        foreach (range('A', 'F') as $column) {
+        foreach (range('A', 'H') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
-
-        $wastageRows = $this->wastageReport($request);
-        $wastageSheet = $spreadsheet->createSheet();
-        $wastageSheet->setTitle('Wastage');
-        $wastageSheet->setCellValue('A1', 'BloomKeeper Wastage by Flower');
-        $wastageSheet->setCellValue('A2', "Report Period: {$reportPeriod}");
-        $wastageSheet->mergeCells('A1:D1');
-        $wastageSheet->mergeCells('A2:D2');
-        $wastageSheet->getStyle('A1')->getFont()->setBold(true);
-        $wastageSheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-        $wastageSheet->fromArray(['No.', 'Flower Type', 'Quantity Removed', 'Value Lost (RM)'], null, 'A4');
-        $wastageSheet->getStyle('A4:D4')->getFont()->setBold(true);
-        $wastageSheet->getStyle('A4:D4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D5E4E1');
-
-        $wastageRowNumber = 5;
-
-        foreach ($wastageRows as $index => $row) {
-            $wastageSheet->fromArray([$index + 1, $row['flower_type'], $row['quantity'], $row['value_lost']], null, "A{$wastageRowNumber}");
-            $wastageRowNumber++;
-        }
-
-        $wastageSheet->fromArray([null, 'Total', array_sum(array_column($wastageRows, 'quantity')), round(array_sum(array_column($wastageRows, 'value_lost')), 2)], null, "A{$wastageRowNumber}");
-        $wastageSheet->getStyle("A{$wastageRowNumber}:D{$wastageRowNumber}")->getFont()->setBold(true);
-        $wastageSheet->getStyle("D5:D{$wastageRowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
-
-        foreach (range('A', 'D') as $column) {
-            $wastageSheet->getColumnDimension($column)->setAutoSize(true);
-        }
-
-        $spreadsheet->setActiveSheetIndex(0);
 
         return response()->streamDownload(function () use ($spreadsheet): void {
             (new Xlsx($spreadsheet))->save('php://output');
         }, 'bloomkeeper-report.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    public function exportWastageReport(Request $request): StreamedResponse
+    {
+        ['rows' => $rows, 'totalQuantity' => $totalQuantity, 'totalValueLost' => $totalValueLost, 'reportPeriod' => $reportPeriod] = $this->wastageReport($request);
+
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getDefaultStyle()->getFont()->setSize(14);
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Wastage Report');
+
+        $sheet->setCellValue('A1', 'BloomKeeper Wastage Report');
+        $sheet->setCellValue('A2', "Report Period: {$reportPeriod}");
+        $sheet->setCellValue('A3', 'Generated on: '.now('Asia/Kuala_Lumpur')->format('d M Y, h:i A').' (MYT)');
+        $sheet->mergeCells('A1:H1');
+        $sheet->mergeCells('A2:H2');
+        $sheet->mergeCells('A3:H3');
+        $sheet->getStyle('A1')->getFont()->setBold(true);
+        $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        $sheet->fromArray(['No.', 'Flower Type', 'Expired', 'Damaged', 'Other', 'Total Removed', 'Value Lost (RM)', '% of Wastage'], null, 'A5');
+        $sheet->getStyle('A5:H5')->getFont()->setBold(true);
+        $sheet->getStyle('A5:H5')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D5E4E1');
+
+        $rowNumber = 6;
+
+        foreach ($rows as $index => $row) {
+            $sheet->fromArray([
+                $index + 1,
+                $row['flower_type'],
+                $row['reasons']['expired'],
+                $row['reasons']['damaged'],
+                $row['reasons']['other'],
+                $row['quantity'],
+                $row['value_lost'],
+                $row['share'],
+            ], null, "A{$rowNumber}");
+            $rowNumber++;
+        }
+
+        $reasonTotals = array_map(fn (string $reason): int => array_sum(array_map(fn (array $row): int => $row['reasons'][$reason], $rows)), InventoryItem::WASTAGE_REASONS);
+        $sheet->fromArray([null, 'Total', ...$reasonTotals, $totalQuantity, $totalValueLost, $totalQuantity > 0 ? 1 : 0], null, "A{$rowNumber}");
+        $sheet->getStyle("A{$rowNumber}:H{$rowNumber}")->getFont()->setBold(true);
+
+        $sheet->getStyle("G6:G{$rowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle("H6:H{$rowNumber}")->getNumberFormat()->setFormatCode('0.00%');
+
+        foreach (range('A', 'H') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        return response()->streamDownload(function () use ($spreadsheet): void {
+            (new Xlsx($spreadsheet))->save('php://output');
+        }, 'bloomkeeper-wastage-report.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
@@ -260,75 +298,107 @@ class AdminOperationsController extends Controller
     }
 
     /**
-     * Wastage per flower for the requested date range, valued at cost price.
+     * Wastage per flower for the requested date range (by date recorded), split by reason and valued at the cost saved when it was recorded.
      *
-     * @return array<int, array{flower_type: string, quantity: int, value_lost: float}>
+     * @return array{rows: array<int, array{flower_type: string, quantity: int, reasons: array<string, int>, value_lost: float, share: float}>, totalQuantity: int, totalValueLost: float, recordCount: int, reportPeriod: string}
      */
     private function wastageReport(Request $request): array
     {
-        return StockAdjustment::query()->with('inventoryItem')
+        $adjustments = StockAdjustment::query()->with('inventoryItem')
             ->where('type', 'wastage')
             ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('from')))
             ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
-            ->get()
+            ->get();
+
+        $totalQuantity = (int) $adjustments->sum(fn (StockAdjustment $adjustment): int => abs($adjustment->quantity_change));
+
+        $rows = $adjustments
             ->groupBy(fn (StockAdjustment $adjustment): string => $adjustment->inventoryItem->flower_type)
-            ->map(fn ($adjustments, string $flowerType): array => [
-                'flower_type' => $flowerType,
-                'quantity' => (int) $adjustments->sum(fn (StockAdjustment $adjustment): int => abs($adjustment->quantity_change)),
-                'value_lost' => round($adjustments->sum(fn (StockAdjustment $adjustment): float => abs($adjustment->quantity_change) * (float) $adjustment->inventoryItem->cost_price), 2),
-            ])
+            ->map(function ($flowerAdjustments, string $flowerType) use ($totalQuantity): array {
+                $quantity = (int) $flowerAdjustments->sum(fn (StockAdjustment $adjustment): int => abs($adjustment->quantity_change));
+
+                return [
+                    'flower_type' => $flowerType,
+                    'quantity' => $quantity,
+                    'reasons' => collect(InventoryItem::WASTAGE_REASONS)->mapWithKeys(fn (string $reason): array => [
+                        $reason => (int) $flowerAdjustments->where('reason', $reason)->sum(fn (StockAdjustment $adjustment): int => abs($adjustment->quantity_change)),
+                    ])->all(),
+                    'value_lost' => round($flowerAdjustments->sum(fn (StockAdjustment $adjustment): float => abs($adjustment->quantity_change) * (float) ($adjustment->unit_cost ?? $adjustment->inventoryItem->cost_price)), 2),
+                    'share' => $totalQuantity > 0 ? $quantity / $totalQuantity : 0.0,
+                ];
+            })
             ->sortBy('flower_type', SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
             ->all();
+
+        return [
+            'rows' => $rows,
+            'totalQuantity' => $totalQuantity,
+            'totalValueLost' => round(array_sum(array_column($rows, 'value_lost')), 2),
+            'recordCount' => $adjustments->count(),
+            'reportPeriod' => $this->reportPeriod($request),
+        ];
+    }
+
+    private function reportPeriod(Request $request): string
+    {
+        $from = $request->filled('from') ? $request->date('from')->format('d M Y') : null;
+        $to = $request->filled('to') ? $request->date('to')->format('d M Y') : null;
+
+        return match (true) {
+            $from && $to => "{$from} to {$to}",
+            (bool) $from => "From {$from}",
+            (bool) $to => "Up to {$to}",
+            default => 'All dates',
+        };
     }
 
     /**
      * Build the sales report for the requested collection-date range, excluding cancelled orders.
+     * Sales and cost use the price and cost saved on each order line, so later inventory changes do not alter past figures.
      *
-     * @return array{rows: array<int, array{flower_type: string, quantity: int, unit_price: float, total_sales: float, share: float}>, totalQuantity: int, totalSales: float, reportPeriod: string, sort: string, direction: string}
+     * @return array{rows: array<int, array{flower_type: string, quantity: int, total_sales: float, total_cost: float, profit: float, margin: float, share: float}>, totalQuantity: int, totalSales: float, totalCost: float, totalProfit: float, reportPeriod: string, sort: string, direction: string}
      */
     private function salesReport(Request $request): array
     {
-        $quantities = OrderItem::query()->select('flower_type', DB::raw('SUM(quantity) as quantity'))
+        $sales = OrderItem::query()
+            ->select('flower_type', DB::raw('SUM(quantity) as quantity'), DB::raw('SUM(quantity * unit_price) as total_sales'), DB::raw('SUM(quantity * COALESCE(unit_cost, 0)) as total_cost'))
             ->whereHas('order', fn ($order) => $order
                 ->where('status', '!=', 'cancelled')
                 ->when($request->filled('from'), fn ($query) => $query->whereDate('collection_date', '>=', $request->date('from')))
                 ->when($request->filled('to'), fn ($query) => $query->whereDate('collection_date', '<=', $request->date('to'))))
             ->groupBy('flower_type')->orderBy('flower_type')->get();
 
-        $unitPrices = InventoryItem::query()->orderBy('date_received')->pluck('unit_price', 'flower_type');
-        $totalQuantity = (int) $quantities->sum('quantity');
+        $totalQuantity = (int) $sales->sum('quantity');
 
-        $rows = $quantities->map(function (OrderItem $item) use ($unitPrices, $totalQuantity): array {
+        $rows = $sales->map(function (OrderItem $item) use ($totalQuantity): array {
             $quantity = (int) $item->quantity;
-            $unitPrice = (float) ($unitPrices[$item->flower_type] ?? 0);
+            $totalSales = round((float) $item->total_sales, 2);
+            $totalCost = round((float) $item->total_cost, 2);
+            $profit = round($totalSales - $totalCost, 2);
 
             return [
                 'flower_type' => $item->flower_type,
                 'quantity' => $quantity,
-                'unit_price' => $unitPrice,
-                'total_sales' => round($quantity * $unitPrice, 2),
+                'total_sales' => $totalSales,
+                'total_cost' => $totalCost,
+                'profit' => $profit,
+                'margin' => $totalSales > 0 ? $profit / $totalSales : 0.0,
                 'share' => $totalQuantity > 0 ? $quantity / $totalQuantity : 0.0,
             ];
         });
 
-        $sort = in_array($request->query('sort'), ['flower_type', 'quantity', 'total_sales'], true) ? $request->query('sort') : 'flower_type';
+        $sort = in_array($request->query('sort'), ['flower_type', 'quantity', 'total_sales', 'profit'], true) ? $request->query('sort') : 'flower_type';
         $direction = $request->query('direction') === 'desc' ? 'desc' : 'asc';
         $rows = $rows->sortBy($sort, SORT_NATURAL | SORT_FLAG_CASE, $direction === 'desc')->values()->all();
-
-        $from = $request->filled('from') ? $request->date('from')->format('d M Y') : null;
-        $to = $request->filled('to') ? $request->date('to')->format('d M Y') : null;
 
         return [
             'rows' => $rows,
             'totalQuantity' => $totalQuantity,
             'totalSales' => round(array_sum(array_column($rows, 'total_sales')), 2),
-            'reportPeriod' => match (true) {
-                $from && $to => "{$from} to {$to}",
-                (bool) $from => "From {$from}",
-                (bool) $to => "Up to {$to}",
-                default => 'All dates',
-            },
+            'totalCost' => round(array_sum(array_column($rows, 'total_cost')), 2),
+            'totalProfit' => round(array_sum(array_column($rows, 'profit')), 2),
+            'reportPeriod' => $this->reportPeriod($request),
             'sort' => $sort,
             'direction' => $direction,
         ];
