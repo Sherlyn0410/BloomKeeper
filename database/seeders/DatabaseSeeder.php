@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             AdminUserSeeder::class,
             InventorySeeder::class,
             CustomerOrderSeeder::class,
+            WastageSeeder::class,
         ]);
     }
 }

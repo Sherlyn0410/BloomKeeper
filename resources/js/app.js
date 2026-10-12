@@ -71,3 +71,55 @@ document.querySelectorAll('[data-password-strength-input]').forEach((input) => {
 		label.style.color = password.length === 0 ? '' : strengthLevels[level - 1].color;
 	});
 });
+
+const formatPhone = (digits) => {
+	if (digits.length <= 3) {
+		return digits;
+	}
+
+	const rest = digits.slice(3);
+	const firstGroupLength = digits.startsWith('011') ? 4 : 3;
+	const groups = [rest.slice(0, firstGroupLength), rest.slice(firstGroupLength)];
+
+	return `${digits.slice(0, 3)}-${groups.filter(Boolean).join(' ')}`;
+};
+
+const caretAfterDigits = (formatted, digitCount) => {
+	let seen = 0;
+
+	for (let index = 0; index < formatted.length; index++) {
+		if (seen === digitCount) {
+			return index;
+		}
+
+		if (/\d/.test(formatted[index])) {
+			seen++;
+		}
+	}
+
+	return formatted.length;
+};
+
+document.querySelectorAll('[data-phone-input]').forEach((input) => {
+	input.value = formatPhone(input.value.replace(/\D/g, '').slice(0, 11));
+
+	input.addEventListener('keydown', (event) => {
+		const position = input.selectionStart;
+
+		if (event.key === 'Backspace' && position === input.selectionEnd && position > 1 && /\D/.test(input.value[position - 1])) {
+			event.preventDefault();
+			input.value = input.value.slice(0, position - 2) + input.value.slice(position);
+			input.setSelectionRange(position - 2, position - 2);
+			input.dispatchEvent(new Event('input'));
+		}
+	});
+
+	input.addEventListener('input', () => {
+		const digitsBeforeCaret = input.value.slice(0, input.selectionStart).replace(/\D/g, '').length;
+		const formatted = formatPhone(input.value.replace(/\D/g, '').slice(0, 11));
+		const caret = caretAfterDigits(formatted, digitsBeforeCaret);
+
+		input.value = formatted;
+		input.setSelectionRange(caret, caret);
+	});
+});

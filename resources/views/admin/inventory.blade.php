@@ -2,28 +2,69 @@
     title="Inventory"
     description="Track flower stock, monitor shelf life, and keep quantities ready for upcoming orders."
 >
-    <section class="rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
+    <section class="bk-card">
         <div>
-            <h2 class="font-serif text-2xl font-bold">Add flower stock</h2>
+            <h2 class="bk-card-title">Add flower stock</h2>
             <p class="mt-1 text-sm text-[#607a72]">Record a new batch with its pricing and alert thresholds.</p>
         </div>
         <form method="POST" action="{{ route('admin.inventory.store') }}" class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             @csrf
-            <input name="flower_type" placeholder="Flower type" required class="rounded-xl border-0 p-3">
-            <input name="quantity" type="number" min="0" placeholder="Quantity" required class="rounded-xl border-0 p-3">
-            <input name="unit_price" type="number" min="0" step="0.01" placeholder="Unit price (RM)" required class="rounded-xl border-0 p-3">
-            <input name="date_received" type="date" required class="rounded-xl border-0 p-3">
-            <input name="shelf_life_days" type="number" min="1" placeholder="Shelf life days" required class="rounded-xl border-0 p-3">
-            <input name="low_stock_threshold" type="number" min="0" placeholder="Low stock threshold" required class="rounded-xl border-0 p-3">
-            <button class="rounded-xl bg-[#e3953d] px-4 py-3 font-semibold text-white transition hover:bg-[#d47f2a] sm:col-span-2 lg:col-span-3">Add stock item</button>
+            <label class="bk-label">
+                Flower type
+                <input name="flower_type" required class="bk-input">
+            </label>
+            <label class="bk-label">
+                Quantity
+                <input name="quantity" type="number" min="0" required class="bk-input">
+            </label>
+            <label class="bk-label">
+                Selling price (RM)
+                <input name="unit_price" type="number" min="0" step="0.01" required class="bk-input">
+            </label>
+            <label class="bk-label">
+                Cost price (RM)
+                <input name="cost_price" type="number" min="0" step="0.01" required class="bk-input">
+            </label>
+            <label class="bk-label">
+                Date received
+                <input name="date_received" type="date" required class="bk-input">
+            </label>
+            <label class="bk-label">
+                Shelf life (days)
+                <input name="shelf_life_days" type="number" min="1" required class="bk-input">
+            </label>
+            <label class="bk-label">
+                Low stock threshold
+                <input name="low_stock_threshold" type="number" min="0" required class="bk-input">
+            </label>
+            <label class="bk-label">
+                <span>Supplier <span class="font-normal text-[#8aa39c]">(optional)</span></span>
+                <select name="supplier_id" class="bk-input"><option value="">No supplier</option>@foreach ($suppliers as $supplier)<option value="{{ $supplier->id }}">{{ $supplier->name }}</option>@endforeach</select>
+            </label>
+            <label class="bk-label sm:col-span-2 lg:col-span-3">
+                <span>Notes <span class="font-normal text-[#8aa39c]">(optional)</span></span>
+                <textarea name="notes" rows="1" maxlength="1000" class="bk-input"></textarea>
+            </label>
+            <div class="bk-form-actions">
+                <button class="bk-btn bk-btn-accent">Add stock item</button>
+            </div>
         </form>
     </section>
 
-    <section class="min-w-0 overflow-hidden rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
+    <section class="bk-card min-w-0 overflow-hidden">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <h2 class="font-serif text-2xl font-bold">Live inventory</h2>
+                <h2 class="bk-card-title">Live inventory</h2>
                 <p class="mt-1 text-sm text-[#607a72]">Low stock and approaching spoilage are highlighted.</p>
+                <form class="mt-4 flex flex-wrap gap-2">
+                    <input type="hidden" name="sort" value="{{ $sort }}">
+                    <input type="hidden" name="direction" value="{{ $direction }}">
+                    <input name="search" value="{{ request('search') }}" placeholder="Search flower" class="bk-input w-56">
+                    <button class="bk-btn bk-btn-primary">Search</button>
+                    @if (request()->filled('search'))
+                        <a href="{{ route('admin.inventory', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
+                    @endif
+                </form>
             </div>
             <div class="flex flex-wrap gap-2 text-xs font-semibold">
                 <span class="flex items-center gap-1.5 rounded-full bg-[#f5dcd7] px-3 py-1.5 text-[#b84331]">
@@ -36,27 +77,34 @@
         </div>
 
         <div class="mt-5 overflow-x-auto">
-            <table class="w-full min-w-[900px] text-left text-sm">
+            <table class="w-full min-w-[920px] text-left text-sm">
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                     <tr>
                         <x-admin.sort-header column="flower_type" :sort="$sort" :direction="$direction" class="px-3">Flower</x-admin.sort-header>
                         <x-admin.sort-header column="quantity" :sort="$sort" :direction="$direction" class="px-3">Quantity</x-admin.sort-header>
-                        <th class="px-3 pb-3">Unit price</th>
+                        <th class="px-3 pb-3">Selling price</th>
+                        <th class="px-3 pb-3">Margin</th>
                         <x-admin.sort-header column="date_received" :sort="$sort" :direction="$direction" default-direction="desc" class="px-3">Received</x-admin.sort-header>
-                        <x-admin.sort-header column="spoilage_date" :sort="$sort" :direction="$direction" class="px-3">Shelf life</x-admin.sort-header>
+                        <x-admin.sort-header column="spoilage_date" :sort="$sort" :direction="$direction" class="px-3">Spoil-by</x-admin.sort-header>
                         <th class="px-3 pb-3 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#dce9e6]">
                     @forelse ($inventory as $item)
                         @php
-                            $spoilageDate = $item->date_received->copy()->addDays($item->shelf_life_days);
+                            $spoilageDate = $item->spoilageDate();
                             $isNearSpoilage = $spoilageDate->lte(now()->addDays(2));
+                            $daysLeft = (int) today()->diffInDays($spoilageDate, false);
+                            $margin = (float) $item->unit_price - (float) $item->cost_price;
                             $isLowStock = $item->quantity <= $item->low_stock_threshold;
                         @endphp
                         <tr class="align-top">
                             <td class="px-3 py-4">
                                 <span class="font-semibold text-[#1c2e28]">{{ $item->flower_type }}</span>
+                                <span class="mt-0.5 block text-xs text-[#607a72]">{{ $item->supplier?->name ?? 'No supplier' }}</span>
+                                @if ($item->notes)
+                                    <span class="mt-0.5 block max-w-48 truncate text-xs text-[#8aa39c]" title="{{ $item->notes }}">{{ $item->notes }}</span>
+                                @endif
                                 <div class="mt-1.5 flex flex-wrap gap-1.5">
                                     @if ($isNearSpoilage)
                                         <span class="rounded-full bg-[#f5dcd7] px-2 py-0.5 text-xs font-semibold text-[#b84331]">Spoilage alert</span>
@@ -69,19 +117,26 @@
                             <td class="px-3 py-4 {{ $isLowStock ? 'font-bold text-[#b84331]' : 'text-[#1c2e28]' }}">
                                 {{ $item->quantity }}
                             </td>
-                            <td class="px-3 py-4 text-[#1c2e28]">RM {{ number_format($item->unit_price, 2) }}</td>
-                            <td class="px-3 py-4 text-[#607a72]">{{ $item->date_received->format('d M Y') }}</td>
-                            <td class="px-3 py-4 text-[#607a72]">
-                                {{ $item->shelf_life_days }} days
-                                <span class="block text-xs">until {{ $spoilageDate->format('d M Y') }}</span>
+                            <td class="whitespace-nowrap px-3 py-4 text-[#1c2e28]">
+                                RM {{ number_format($item->unit_price, 2) }}
+                                <span class="block text-xs text-[#8aa39c]">cost RM {{ number_format($item->cost_price, 2) }}</span>
+                            </td>
+                            <td class="whitespace-nowrap px-3 py-4 font-semibold {{ $margin < 0 ? 'text-[#b84331]' : 'text-[#187849]' }}">RM {{ number_format($margin, 2) }}</td>
+                            <td class="whitespace-nowrap px-3 py-4 text-[#607a72]">{{ $item->date_received->format('d M Y') }}</td>
+                            <td class="whitespace-nowrap px-3 py-4 text-[#607a72]">
+                                {{ $spoilageDate->format('d M Y') }}
+                                <span @class(['block text-xs', 'font-semibold text-[#b84331]' => $daysLeft <= 2])>
+                                    {{ $daysLeft < 0 ? abs($daysLeft).' '.Str::plural('day', abs($daysLeft)).' overdue' : ($daysLeft === 0 ? 'Spoils today' : $daysLeft.' '.Str::plural('day', $daysLeft).' left') }}
+                                </span>
                             </td>
                             <td class="px-3 py-4 text-right">
-                                <div class="flex flex-wrap justify-end gap-3 text-xs font-semibold">
+                                <div class="flex justify-end gap-3 whitespace-nowrap text-xs font-semibold">
                                     <button
                                         type="button"
                                         class="cursor-pointer text-[#285443] underline underline-offset-2"
                                         onclick="document.getElementById('edit-stock-{{ $item->id }}').showModal()"
                                     >Edit</button>
+                                    <a href="{{ route('staff.wastage.create', ['item' => $item->id]) }}" class="text-[#a76513] underline underline-offset-2">Wastage</a>
                                     <form method="POST" action="{{ route('admin.inventory.destroy', $item) }}" onsubmit="return confirm('Delete {{ $item->flower_type }}? This cannot be undone.')">
                                         @csrf @method('DELETE')
                                         <button class="cursor-pointer text-[#b84331] underline underline-offset-2" type="submit">Delete</button>
@@ -109,39 +164,51 @@
                                     <div class="mt-6 grid gap-4 sm:grid-cols-2">
                                         <label class="grid gap-1 text-sm sm:col-span-2">
                                             <span class="font-semibold text-[#1c2e28]">Flower type</span>
-                                            <input name="flower_type" value="{{ $item->flower_type }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            <input name="flower_type" value="{{ $item->flower_type }}" required class="bk-input">
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Quantity</span>
-                                            <input name="quantity" type="number" min="0" value="{{ $item->quantity }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            <input name="quantity" type="number" min="0" value="{{ $item->quantity }}" required class="bk-input">
                                         </label>
                                         <label class="grid gap-1 text-sm">
-                                            <span class="font-semibold text-[#1c2e28]">Unit price (RM)</span>
-                                            <input name="unit_price" type="number" min="0" step="0.01" value="{{ $item->unit_price }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            <span class="font-semibold text-[#1c2e28]">Selling price (RM)</span>
+                                            <input name="unit_price" type="number" min="0" step="0.01" value="{{ $item->unit_price }}" required class="bk-input">
+                                        </label>
+                                        <label class="grid gap-1 text-sm">
+                                            <span class="font-semibold text-[#1c2e28]">Cost price (RM)</span>
+                                            <input name="cost_price" type="number" min="0" step="0.01" value="{{ $item->cost_price }}" required class="bk-input">
+                                        </label>
+                                        <label class="grid gap-1 text-sm">
+                                            <span class="font-semibold text-[#1c2e28]">Supplier</span>
+                                            <select name="supplier_id" class="bk-input"><option value="">No supplier</option>@foreach ($suppliers as $supplier)<option value="{{ $supplier->id }}" @selected($item->supplier_id === $supplier->id)>{{ $supplier->name }}</option>@endforeach</select>
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Date received</span>
-                                            <input name="date_received" type="date" value="{{ $item->date_received->format('Y-m-d') }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            <input name="date_received" type="date" value="{{ $item->date_received->format('Y-m-d') }}" required class="bk-input">
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Shelf life (days)</span>
-                                            <input name="shelf_life_days" type="number" min="1" value="{{ $item->shelf_life_days }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            <input name="shelf_life_days" type="number" min="1" value="{{ $item->shelf_life_days }}" required class="bk-input">
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Low stock threshold</span>
-                                            <input name="low_stock_threshold" type="number" min="0" value="{{ $item->low_stock_threshold }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                            <input name="low_stock_threshold" type="number" min="0" value="{{ $item->low_stock_threshold }}" required class="bk-input">
+                                        </label>
+                                        <label class="grid gap-1 text-sm sm:col-span-2">
+                                            <span class="font-semibold text-[#1c2e28]">Notes</span>
+                                            <textarea name="notes" rows="2" maxlength="1000" class="bk-input">{{ $item->notes }}</textarea>
                                         </label>
                                     </div>
                                     <div class="mt-7 flex justify-end gap-3">
-                                        <button type="button" class="cursor-pointer rounded-full px-4 py-2 text-sm font-semibold text-[#607a72] hover:bg-[#edf7f5]" onclick="document.getElementById('edit-stock-{{ $item->id }}').close()">Cancel</button>
-                                        <button class="cursor-pointer rounded-full bg-[#285443] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1c3e32]">Save changes</button>
+                                        <button type="button" class="bk-btn bk-btn-ghost" onclick="document.getElementById('edit-stock-{{ $item->id }}').close()">Cancel</button>
+                                        <button class="bk-btn bk-btn-primary">Save changes</button>
                                     </div>
                                 </form>
                             </div>
                         </dialog>
 
                     @empty
-                        <tr><td colspan="6" class="py-8 text-center text-sm text-[#607a72]">No inventory items yet.</td></tr>
+                        <tr><td colspan="7" class="py-8 text-center text-sm text-[#607a72]">{{ request()->filled('search') ? 'No flowers match your search.' : 'No inventory items yet.' }}</td></tr>
                     @endforelse
                 </tbody>
             </table>

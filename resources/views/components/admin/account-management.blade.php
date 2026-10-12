@@ -4,10 +4,10 @@
     'accountLabel',
 ])
 
-<section class="overflow-hidden rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
+<section class="bk-card overflow-hidden">
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
-            <h2 class="font-serif text-2xl font-bold">{{ $accountLabel }} directory</h2>
+            <h2 class="bk-card-title">{{ $accountLabel }} directory</h2>
             <p class="mt-1 text-sm text-[#607a72]">Manage access, approval status, and account details.</p>
         </div>
         <form method="GET" class="flex flex-wrap gap-2" data-live-filter>
@@ -16,10 +16,10 @@
                 name="search"
                 value="{{ request('search') }}"
                 placeholder="Search name or email"
-                class="rounded-lg border-0 p-2 text-sm"
+                class="bk-input"
                 data-live-filter-input
             >
-            <select name="status" class="rounded-lg border-0 p-2" data-live-filter-select>
+            <select name="status" class="bk-input" data-live-filter-select>
                 <option value="">All statuses</option>
                 <option value="approved" @selected(request('status') === 'approved')>Active</option>
                 <option value="suspended" @selected(request('status') === 'suspended')>Inactive</option>
@@ -72,17 +72,17 @@
                                 @if ($user->approval_status === 'pending')
                                     <form method="POST" action="{{ route('admin.users.approve', $user) }}">
                                         @csrf @method('PATCH')
-                                        <button class="cursor-pointer rounded-full bg-[#285443] px-4 py-2 text-xs font-semibold text-white" type="submit">Approve</button>
+                                        <button class="bk-btn bk-btn-primary bk-btn-sm" type="submit">Approve</button>
                                     </form>
                                     <form method="POST" action="{{ route('admin.users.decline', $user) }}">
                                         @csrf @method('PATCH')
-                                        <button class="cursor-pointer rounded-full bg-[#f5dcd7] px-4 py-2 text-xs font-semibold text-[#b84331]" type="submit">Decline</button>
+                                        <button class="bk-btn bk-btn-danger-soft bk-btn-sm" type="submit">Decline</button>
                                     </form>
                                 @elseif ($user->approval_status === 'approved')
                                     <form method="POST" action="{{ route('admin.users.suspend', $user) }}">
                                         @csrf @method('PATCH')
                                         <button
-                                            class="{{ $isSelf ? 'cursor-not-allowed' : 'cursor-pointer' }} rounded-full px-4 py-2 text-xs font-semibold {{ $isSelf ? 'bg-[#e7ece9] text-[#a3b3ad]' : 'bg-[#f5dcd7] text-[#b84331]' }}"
+                                            class="bk-btn bk-btn-sm {{ $isSelf ? 'cursor-not-allowed bg-[#e7ece9] text-[#a3b3ad]' : 'bk-btn-danger-soft' }}"
                                             type="submit"
                                             {{ $isSelf ? 'disabled title=You cannot suspend your own account' : '' }}
                                         >Suspend</button>
@@ -90,7 +90,7 @@
                                 @elseif (in_array($user->approval_status, ['suspended', 'declined']))
                                     <form method="POST" action="{{ route('admin.users.restore', $user) }}">
                                         @csrf @method('PATCH')
-                                        <button class="cursor-pointer rounded-full bg-[#d7f0df] px-4 py-2 text-xs font-semibold text-[#187849]" type="submit">Restore</button>
+                                        <button class="bk-btn bk-btn-success-soft bk-btn-sm" type="submit">Restore</button>
                                     </form>
                                 @endif
                             </div>
@@ -126,19 +126,19 @@
                                         <div class="mt-6 grid gap-4">
                                             <label class="grid gap-1 text-sm">
                                                 <span class="font-semibold text-[#1c2e28]">Full name</span>
-                                                <input name="name" value="{{ $user->name }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                                <input name="name" value="{{ $user->name }}" required class="bk-input">
                                             </label>
                                             <label class="grid gap-1 text-sm">
                                                 <span class="font-semibold text-[#1c2e28]">Email</span>
-                                                <input name="email" type="email" value="{{ $user->email }}" required class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                                <input name="email" type="email" value="{{ $user->email }}" required class="bk-input">
                                             </label>
 
                                             <div class="border-t border-[#e5efec] pt-4">
                                                 <p class="text-xs font-semibold uppercase tracking-wide text-[#607a72]">Reset password</p>
                                                 <p class="mt-1 text-xs text-[#8199a2]">Leave both fields blank to keep the current password.</p>
                                                 <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                                                    <input name="password" type="password" placeholder="New password" minlength="8" class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
-                                                    <input name="password_confirmation" type="password" placeholder="Confirm new password" minlength="8" class="rounded-xl border border-[#d4e4e0] bg-[#f7fbfa] p-3 text-sm focus:border-[#285443] focus:outline-none">
+                                                    <input name="password" type="password" placeholder="New password" minlength="8" class="bk-input">
+                                                    <input name="password_confirmation" type="password" placeholder="Confirm new password" minlength="8" class="bk-input">
                                                 </div>
                                             </div>
                                         </div>
@@ -146,10 +146,10 @@
                                         <div class="mt-7 flex justify-end gap-3">
                                             <button
                                                 type="button"
-                                                class="cursor-pointer rounded-full px-4 py-2 text-sm font-semibold text-[#607a72] hover:bg-[#edf7f5]"
+                                                class="bk-btn bk-btn-ghost"
                                                 onclick="document.getElementById('edit-user-{{ $user->id }}').close()"
                                             >Cancel</button>
-                                            <button class="cursor-pointer rounded-full bg-[#285443] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1c3e32]">Save changes</button>
+                                            <button class="bk-btn bk-btn-primary">Save changes</button>
                                         </div>
                                     </form>
                                 </div>

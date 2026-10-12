@@ -16,3 +16,77 @@ a {
 button:disabled {
     cursor: not-allowed;
 }
+
+/*
+ * BloomKeeper workspace design system.
+ * Pills (rounded-full) are for tabs, filters and status badges; rounded-xl is for actions and fields.
+ */
+@layer components {
+    .bk-card {
+        @apply rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7;
+    }
+
+    .bk-card-title {
+        @apply font-serif text-2xl font-bold text-[#203d37];
+    }
+
+    .bk-card-subtitle {
+        @apply mt-1 text-sm text-[#607a72];
+    }
+
+    .bk-tile {
+        @apply rounded-2xl bg-white/70 p-4 sm:p-5;
+    }
+
+    .bk-label {
+        @apply flex flex-col gap-1.5 text-sm font-semibold text-[#49665f];
+    }
+
+    .bk-input {
+        @apply rounded-xl border border-[#c9dcd7] bg-white px-3 py-2 text-sm font-normal text-[#203d37] shadow-sm transition placeholder:text-[#9db3ad] focus:border-[#285443] focus:ring-2 focus:ring-[#285443]/20 focus:outline-none;
+    }
+
+    .bk-input-sm {
+        @apply rounded-lg py-1.5 pr-8 pl-2.5 text-xs font-semibold shadow-none;
+    }
+
+    .bk-form-actions {
+        @apply col-span-full flex flex-wrap items-center justify-end gap-2 border-t border-[#d4e4e0] pt-4;
+    }
+
+    .bk-btn {
+        @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-transparent px-4 py-2 text-sm font-semibold whitespace-nowrap transition active:scale-[0.98];
+    }
+
+    .bk-btn-sm {
+        @apply rounded-lg px-2.5 py-1 text-xs;
+    }
+
+    .bk-btn-primary {
+        @apply bg-[#285443] text-white shadow-sm hover:bg-[#1f4435];
+    }
+
+    .bk-btn-accent {
+        @apply bg-[#e3953d] text-white shadow-sm hover:bg-[#d47f2a];
+    }
+
+    .bk-btn-danger {
+        @apply bg-[#b84331] text-white shadow-sm hover:bg-[#9c3828];
+    }
+
+    .bk-btn-secondary {
+        @apply border-[#c9dcd7] bg-white text-[#285443] hover:bg-[#f2f8f6];
+    }
+
+    .bk-btn-ghost {
+        @apply text-[#49665f] hover:bg-[#dce9e6];
+    }
+
+    .bk-btn-danger-soft {
+        @apply bg-[#f5dcd7] text-[#b84331] hover:bg-[#edc9c2];
+    }
+
+    .bk-btn-success-soft {
+        @apply bg-[#d7f0df] text-[#187849] hover:bg-[#c4e8cf];
+    }
+}

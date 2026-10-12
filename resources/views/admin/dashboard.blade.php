@@ -28,7 +28,7 @@
                         ['label' => 'Pending orders', 'value' => $pendingOrders, 'note' => 'Awaiting fulfilment', 'tone' => 'text-[#285443]'],
                         ['label' => 'Pending purchase orders', 'value' => $pendingPurchaseOrders, 'note' => 'Waiting on suppliers', 'tone' => 'text-[#1c9b5f]'],
                     ] as $stat)
-                        <div class="rounded-3xl bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)]">
+                        <div class="bk-card">
                             <p class="text-sm text-[#49665f]">{{ $stat['label'] }}</p>
                             <p class="mt-3 text-3xl font-bold {{ $stat['tone'] }}">{{ $stat['value'] }}</p>
                             <p class="mt-2 text-sm text-[#607a72]">{{ $stat['note'] }}</p>
@@ -37,10 +37,10 @@
                 </div>
 
                 <div class="mt-6 grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
-                    <section class="rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
+                    <section class="bk-card">
                         <div class="flex items-center justify-between gap-4">
                             <div>
-                                <h2 class="font-serif text-2xl font-bold">Recent orders</h2>
+                                <h2 class="bk-card-title">Recent orders</h2>
                                 <p class="mt-1 text-sm text-[#607a72]">Latest customer activity and collection dates.</p>
                             </div>
                             <a href="{{ route('admin.orders') }}" class="text-sm font-semibold text-[#285443] underline underline-offset-4">View all</a>
@@ -64,8 +64,8 @@
                         </div>
                     </section>
 
-                    <aside class="rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
-                        <h2 class="font-serif text-2xl font-bold">Quick alerts</h2>
+                    <aside class="bk-card">
+                        <h2 class="bk-card-title">Quick alerts</h2>
                         <div class="mt-5 space-y-3">
                             @forelse ($recentInventoryAlerts as $alert)
                                 @php
@@ -96,10 +96,10 @@
                     </aside>
                 </div>
 
-                <section class="mt-6 rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
+                <section class="bk-card mt-6">
                     <div class="flex items-center justify-between gap-4">
                         <div>
-                            <h2 class="font-serif text-2xl font-bold">Recent accounts</h2>
+                            <h2 class="bk-card-title">Recent accounts</h2>
                             <p class="mt-1 text-sm text-[#607a72]">Keep an eye on the latest administrative activity.</p>
                             <p class="mt-2 text-sm font-semibold text-[#a76513]">Pending approval: {{ $pendingUsers }}</p>
                         </div>
@@ -122,8 +122,8 @@
                                         <td class="py-4 text-right">
                                             @if ($user->approval_status === 'pending')
                                                 <div class="flex justify-end gap-2">
-                                                    <form method="POST" action="{{ route('admin.users.approve', $user) }}">@csrf @method('PATCH')<button type="submit" class="rounded-full bg-[#285443] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#1f4435]">Approve</button></form>
-                                                    <form method="POST" action="{{ route('admin.users.decline', $user) }}">@csrf @method('PATCH')<button type="submit" class="rounded-full bg-[#f5dcd7] px-3 py-2 text-xs font-semibold text-[#b84331] transition hover:bg-[#edc9c2]">Decline</button></form>
+                                                    <form method="POST" action="{{ route('admin.users.approve', $user) }}">@csrf @method('PATCH')<button type="submit" class="bk-btn bk-btn-primary bk-btn-sm">Approve</button></form>
+                                                    <form method="POST" action="{{ route('admin.users.decline', $user) }}">@csrf @method('PATCH')<button type="submit" class="bk-btn bk-btn-danger-soft bk-btn-sm">Decline</button></form>
                                                 </div>
                                             @else
                                                 <span class="text-xs text-[#607a72]">No action</span>

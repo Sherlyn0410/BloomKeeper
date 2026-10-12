@@ -13,7 +13,7 @@
 
 <th {{ $attributes->merge(['class' => 'pb-3']) }} @if ($isActive) aria-sort="{{ $direction === 'asc' ? 'ascending' : 'descending' }}" @endif>
     <a href="{{ $url }}" @class([
-        'group inline-flex items-center gap-1 uppercase tracking-wider transition hover:text-[#203d37]',
+        'group inline-flex items-center gap-1 whitespace-nowrap uppercase tracking-wider transition hover:text-[#203d37]',
         'text-[#203d37]' => $isActive,
     ])>
         <span>{{ $slot }}</span>

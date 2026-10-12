@@ -13,26 +13,26 @@
     title="Customer Orders"
     description="Review customer collections, inspect order items, and move each order through fulfilment."
 >
-    <section class="rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
+    <section class="bk-card">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <h2 class="font-serif text-2xl font-bold">Order queue</h2>
+                <h2 class="bk-card-title">Order queue</h2>
                 <p class="mt-1 text-sm text-[#607a72]">Filter the queue by customer, collection date, or status.</p>
             </div>
             <form class="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="status" value="{{ $activeStatus }}">
                 <label class="relative">
-                    <span class="sr-only">Customer</span>
+                    <span class="sr-only">Customer or order number</span>
                     <svg class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8aa39c]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.45 4.39l3.08 3.08a.75.75 0 1 1-1.06 1.06l-3.08-3.08A7 7 0 0 1 2 9Z" clip-rule="evenodd" /></svg>
-                    <input name="customer" value="{{ request('customer') }}" placeholder="Search customer" class="w-48 rounded-lg border-0 py-2 pr-3 pl-9 text-sm">
+                    <input name="customer" value="{{ request('customer') }}" placeholder="Customer or order no." class="bk-input w-48 pl-9">
                 </label>
                 <label>
                     <span class="sr-only">Collection date</span>
-                    <input name="date" value="{{ request('date') }}" type="date" class="rounded-lg border-0 p-2 text-sm">
+                    <input name="date" value="{{ request('date') }}" type="date" class="bk-input">
                 </label>
-                <button class="rounded-lg bg-[#285443] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#1f4435]">Filter</button>
+                <button class="bk-btn bk-btn-primary">Filter</button>
                 @if (request()->filled('customer') || request()->filled('date'))
-                    <a href="{{ route('admin.orders', array_filter(['status' => $activeStatus])) }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-[#49665f] transition hover:bg-[#dce9e6]">Clear</a>
+                    <a href="{{ route('admin.orders', array_filter(['status' => $activeStatus])) }}" class="bk-btn bk-btn-ghost">Clear</a>
                 @endif
             </form>
         </div>
@@ -75,15 +75,16 @@
                     };
                 @endphp
                 <article @class([
-                    'rounded-2xl bg-white/70 p-4 transition hover:bg-white sm:p-5',
+                    'bk-tile transition hover:bg-white',
                     'opacity-70' => $order->status === 'cancelled',
                 ])>
                     <div class="flex flex-wrap items-start justify-between gap-4">
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-xs font-semibold text-[#8aa39c]">#{{ str_pad($order->id, 4, '0', STR_PAD_LEFT) }}</span>
+                                <span class="text-xs font-semibold text-[#8aa39c]">{{ $order->order_number }}</span>
                                 <h3 class="font-semibold text-[#1c2e28]">{{ $order->customer_name }}</h3>
                                 <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $statusStyles[$order->status]['badge'] ?? 'bg-[#dce9e6] text-[#49665f]' }}">{{ ucfirst($order->status) }}</span>
+                                <span @class(['rounded-full px-2.5 py-0.5 text-xs font-semibold', 'bg-[#d7f0df] text-[#187849]' => $order->payment_status === 'paid', 'bg-[#dce9e6] text-[#49665f]' => $order->payment_status !== 'paid'])>{{ ucfirst($order->payment_status) }}</span>
                             </div>
                             <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#607a72]">
                                 @if ($order->customer_email)
@@ -95,12 +96,12 @@
                                 @if ($order->customer_phone)
                                     <span class="flex items-center gap-1.5">
                                         <svg class="size-4 text-[#8aa39c]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 0 1 3.5 2h1.15c.86 0 1.6.58 1.82 1.41l.66 2.49a1.88 1.88 0 0 1-.7 1.97l-.8.6a.5.5 0 0 0-.17.57 9.02 9.02 0 0 0 5.5 5.5.5.5 0 0 0 .57-.17l.6-.8a1.88 1.88 0 0 1 1.97-.7l2.49.66c.83.22 1.41.96 1.41 1.82v1.15A1.5 1.5 0 0 1 16.5 18H15C7.82 18 2 12.18 2 5V3.5Z" clip-rule="evenodd" /></svg>
-                                        {{ $order->customer_phone }}
+                                        {{ $order->formatted_phone }}
                                     </span>
                                 @endif
                                 <span class="flex items-center gap-1.5">
                                     <svg class="size-4 text-[#8aa39c]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z" clip-rule="evenodd" /></svg>
-                                    Collection {{ $order->collection_date->format('d M Y') }}
+                                    Collection {{ $order->collection_date->format('d M Y') }}{{ $order->collection_time ? ', '.\Illuminate\Support\Carbon::parse($order->collection_time)->format('h:i A') : '' }}
                                     @if ($collectionLabel)
                                         <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ $collectionLabel['class'] }}">{{ $collectionLabel['text'] }}</span>
                                     @endif
@@ -108,16 +109,17 @@
                             </div>
                         </div>
 
-                        <div class="flex items-center gap-4">
+                        <div class="flex flex-wrap items-center gap-4">
                             <div class="text-right">
                                 <p class="text-xs text-[#8aa39c]">Order total</p>
                                 <p class="font-bold text-[#1c2e28]">RM {{ number_format($orderTotal, 2) }}</p>
+                                <x-order-actions :order="$order" class="mt-1 justify-end" />
                             </div>
                             <form method="POST" action="{{ route('admin.orders.status', $order) }}">
                                 @csrf
                                 @method('PATCH')
                                 <label class="sr-only" for="order-status-{{ $order->id }}">Update status</label>
-                                <select id="order-status-{{ $order->id }}" name="status" onchange="this.form.submit()" class="rounded-lg border border-[#d4e4e0] bg-white py-2 pr-8 pl-3 text-sm font-semibold text-[#285443] focus:border-[#285443] focus:outline-none">
+                                <select id="order-status-{{ $order->id }}" name="status" onchange="this.form.submit()" class="bk-input bk-input-sm text-[#285443]">
                                     @foreach (['pending' => 'Pending', 'ready' => 'Ready', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $value => $label)
                                         <option value="{{ $value }}" @selected($order->status === $value)>{{ $label }}</option>
                                     @endforeach
@@ -125,6 +127,10 @@
                             </form>
                         </div>
                     </div>
+
+                    @if ($order->notes)
+                        <p class="mt-3 rounded-lg bg-[#fdf6ea] px-3 py-2 text-sm text-[#7a5a2b]"><span class="font-semibold">Notes:</span> {{ $order->notes }}</p>
+                    @endif
 
                     @if ($order->items->isNotEmpty())
                         <ul class="mt-4 flex flex-wrap gap-2 border-t border-[#e3eeeb] pt-4">
@@ -137,7 +143,7 @@
                     @endif
                 </article>
             @empty
-                <div class="rounded-2xl bg-white/60 p-10 text-center">
+                <div class="bk-tile text-center">
                     <p class="font-semibold text-[#49665f]">No orders found</p>
                     <p class="mt-1 text-sm text-[#607a72]">No orders match the current filters.</p>
                 </div>

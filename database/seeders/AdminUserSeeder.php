@@ -20,7 +20,7 @@ class AdminUserSeeder extends Seeder
             );
         }
 
-        User::updateOrCreate(
+        $admin = User::updateOrCreate(
             ['email' => $email],
             [
                 'name' => $name,
@@ -28,6 +28,10 @@ class AdminUserSeeder extends Seeder
                 'password' => Hash::make($password),
             ],
         );
+
+        if ($admin->email_verified_at === null) {
+            $admin->forceFill(['email_verified_at' => now()])->save();
+        }
 
         User::where('role', 'admin')
             ->where('email', '!=', $email)

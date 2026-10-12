@@ -3,6 +3,7 @@
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
 use App\Models\OrderItem;
+use App\Models\PurchaseOrder;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -11,12 +12,13 @@ test('an administrator can add inventory stock', function () {
     $admin = User::factory()->create(['role' => 'admin']);
 
     $this->actingAs($admin)->post(route('admin.inventory.store'), [
-        'flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50,
+        'flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50, 'cost_price' => 1.20,
         'date_received' => '2026-09-22', 'shelf_life_days' => 7, 'low_stock_threshold' => 5,
-    ])->assertRedirect();
+    ])->assertRedirect()->assertSessionHasNoErrors();
 
     $item = InventoryItem::firstOrFail();
-    expect($item->refresh()->quantity)->toBe(20);
+    expect($item->refresh()->quantity)->toBe(20)
+        ->and($item->cost_price)->toBe('1.20');
 });
 
 test('an administrator can update orders, purchasing, and export reports', function () {
@@ -179,6 +181,51 @@ test('the orders page shows status counts, order totals, and filters by status',
         ->assertOk()
         ->assertSee('Mina Flores')
         ->assertDontSee('Leo Tan');
+});
+
+test('the inventory page searches flowers and shows supplier, margin, and days left', function () {
+    $this->travelTo(Carbon::parse('2026-10-12 09:00:00'));
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier', 'name' => 'Highland Florals']);
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => '2026-10-10', 'shelf_life_days' => 7, 'low_stock_threshold' => 5, 'supplier_id' => $supplier->id]);
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 20, 'unit_price' => 1.80, 'cost_price' => 0.90, 'date_received' => '2026-10-10', 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.inventory', ['search' => 'ros']))
+        ->assertOk()
+        ->assertSee('Highland Florals')
+        ->assertSee('RM 1.30')
+        ->assertSee('17 Oct 2026')
+        ->assertSee('5 days left')
+        ->assertDontSee('Tulips');
+});
+
+test('inventory suppliers must be supplier accounts', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->post(route('admin.inventory.store'), [
+        'flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50, 'cost_price' => 1.20,
+        'date_received' => '2026-09-22', 'shelf_life_days' => 7, 'low_stock_threshold' => 5, 'supplier_id' => $admin->id,
+    ])->assertSessionHasErrors('supplier_id');
+});
+
+test('marking a purchase order fulfilled records when it happened', function () {
+    $this->travelTo(Carbon::parse('2026-10-12 09:00:00'));
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->post(route('admin.purchase-orders.store'), [
+        'supplier_name' => 'Greenhouse Co', 'requested_date' => '2026-10-15', 'flower_type' => 'Tulips', 'quantity' => 30, 'notes' => 'Deliver before 9am.',
+    ])->assertSessionHasNoErrors();
+
+    $purchaseOrder = PurchaseOrder::sole();
+    expect($purchaseOrder->notes)->toBe('Deliver before 9am.')
+        ->and($purchaseOrder->fulfilled_at)->toBeNull();
+
+    $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'fulfilled']);
+    expect($purchaseOrder->refresh()->fulfilled_at->toDateTimeString())->toBe('2026-10-12 09:00:00');
+
+    $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'cancelled']);
+    expect($purchaseOrder->refresh()->fulfilled_at)->toBeNull();
 });
 
 test('non administrators cannot access operations', function () {

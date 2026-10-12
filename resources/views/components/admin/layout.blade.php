@@ -23,7 +23,7 @@
                         <h1 class="mt-2 font-serif text-3xl font-bold tracking-tight sm:text-4xl">{{ $title }}</h1>
                         <p class="mt-2 max-w-2xl text-sm text-[#607a72]">{{ $description }}</p>
                     </div>
-                    <a href="{{ route('admin.dashboard') }}" class="rounded-full bg-white/70 px-4 py-2 text-sm font-semibold text-[#49665f] transition hover:bg-white">Back to dashboard</a>
+                    <a href="{{ route('admin.dashboard') }}" class="bk-btn bk-btn-secondary">Back to dashboard</a>
                 </header>
 
                 @if (session('status'))

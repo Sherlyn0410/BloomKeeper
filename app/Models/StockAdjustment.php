@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['inventory_item_id', 'user_id', 'quantity_change', 'reason'])]
+#[Fillable(['inventory_item_id', 'user_id', 'type', 'quantity_change', 'reason', 'notes'])]
 class StockAdjustment extends Model
 {
     public function inventoryItem(): BelongsTo

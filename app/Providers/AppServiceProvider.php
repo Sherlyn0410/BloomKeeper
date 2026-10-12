@@ -26,6 +26,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define('manage-users', fn (User $user): bool => $user->role === 'admin');
+        Gate::define('use-workspace', fn (User $user): bool => $user->approval_status === 'approved');
+        Gate::define('manage-customers', fn (User $user): bool => in_array($user->role, ['admin', 'staff'], true) && $user->approval_status === 'approved');
 
         RateLimiter::for('auth', function (Request $request): Limit {
             return Limit::perMinute(5)->by(

@@ -6,10 +6,13 @@ use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
 use App\Models\OrderItem;
 use App\Models\PurchaseOrder;
+use App\Models\StockAdjustment;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -30,14 +33,17 @@ class AdminOperationsController extends Controller
             'flower_type' => fn (InventoryItem $item): string => strtolower($item->flower_type),
             'quantity' => fn (InventoryItem $item): int => $item->quantity,
             'date_received' => fn (InventoryItem $item): int => $item->date_received->timestamp,
-            'spoilage_date' => fn (InventoryItem $item): int => $item->date_received->copy()->addDays($item->shelf_life_days)->timestamp,
+            'spoilage_date' => fn (InventoryItem $item): int => $item->spoilageDate()->timestamp,
         ];
         $sort = array_key_exists($request->query('sort'), $sortableColumns) ? $request->query('sort') : 'flower_type';
         $direction = $request->query('direction') === 'desc' ? 'desc' : 'asc';
 
         return view('admin.inventory', [
-            'inventory' => InventoryItem::query()->orderBy('flower_type')->get()
+            'inventory' => InventoryItem::query()->with('supplier')
+                ->when($request->filled('search'), fn ($query) => $query->where('flower_type', 'like', '%'.$request->string('search').'%'))
+                ->orderBy('flower_type')->get()
                 ->sortBy($sortableColumns[$sort], SORT_REGULAR, $direction === 'desc')->values(),
+            'suppliers' => $this->approvedSuppliers(),
             'sort' => $sort,
             'direction' => $direction,
         ]);
@@ -46,7 +52,9 @@ class AdminOperationsController extends Controller
     public function orders(Request $request): View
     {
         $orders = CustomerOrder::query()
-            ->when($request->filled('customer'), fn ($query) => $query->where('customer_name', 'like', '%'.$request->string('customer').'%'))
+            ->when($request->filled('customer'), fn ($query) => $query->where(fn ($query) => $query
+                ->where('customer_name', 'like', '%'.$request->string('customer').'%')
+                ->orWhere('order_number', 'like', '%'.$request->string('customer').'%')))
             ->when($request->filled('date'), fn ($query) => $query->whereDate('collection_date', $request->date('date')));
 
         $statusCounts = (clone $orders)->select('status', DB::raw('COUNT(*) as total'))->groupBy('status')->pluck('total', 'status');
@@ -64,34 +72,40 @@ class AdminOperationsController extends Controller
     {
         return view('admin.purchase-orders', [
             'purchaseOrders' => PurchaseOrder::query()->with(['items', 'creator'])->latest()->get(),
-            'suppliers' => User::query()->where('role', 'supplier')->where('approval_status', 'approved')->orderBy('name')->get(),
+            'suppliers' => $this->approvedSuppliers(),
+        ]);
+    }
+
+    public function wastage(Request $request): View
+    {
+        $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date', 'after_or_equal:from']]);
+
+        return view('admin.wastage', [
+            'adjustments' => StockAdjustment::query()->with(['inventoryItem', 'user'])
+                ->where('type', 'wastage')
+                ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('from')))
+                ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
+                ->latest()
+                ->paginate(20)
+                ->withQueryString(),
         ]);
     }
 
     public function reports(Request $request): View
     {
-        return view('admin.reports', $this->salesReport($request));
+        return view('admin.reports', [...$this->salesReport($request), 'wastageRows' => $this->wastageReport($request)]);
     }
 
     public function storeInventory(Request $request): RedirectResponse
     {
-        $data = $request->validate([
-            'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:0'],
-            'unit_price' => ['required', 'numeric', 'min:0'], 'date_received' => ['required', 'date'],
-            'shelf_life_days' => ['required', 'integer', 'min:1'], 'low_stock_threshold' => ['required', 'integer', 'min:0'],
-        ]);
-        InventoryItem::create($data);
+        InventoryItem::create($request->validate($this->inventoryRules()));
 
         return back()->with('status', 'Inventory item added.');
     }
 
     public function updateInventory(Request $request, InventoryItem $inventoryItem): RedirectResponse
     {
-        $inventoryItem->update($request->validate([
-            'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:0'],
-            'unit_price' => ['required', 'numeric', 'min:0'], 'date_received' => ['required', 'date'],
-            'shelf_life_days' => ['required', 'integer', 'min:1'], 'low_stock_threshold' => ['required', 'integer', 'min:0'],
-        ]));
+        $inventoryItem->update($request->validate($this->inventoryRules()));
 
         return back()->with('status', 'Inventory item updated.');
     }
@@ -115,6 +129,7 @@ class AdminOperationsController extends Controller
         $data = $request->validate([
             'supplier_id' => ['nullable', 'exists:users,id'], 'supplier_name' => ['required', 'string', 'max:255'],
             'requested_date' => ['required', 'date'], 'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:1'],
+            'notes' => ['nullable', 'string', 'max:1000'],
         ]);
         DB::transaction(function () use ($data): void {
             $purchaseOrder = PurchaseOrder::create([...$data, 'created_by' => auth()->id(), 'status' => 'sent']);
@@ -126,7 +141,11 @@ class AdminOperationsController extends Controller
 
     public function updatePurchaseOrderStatus(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
     {
-        $purchaseOrder->update($request->validate(['status' => ['required', 'in:sent,fulfilled,cancelled']]));
+        $data = $request->validate(['status' => ['required', 'in:sent,fulfilled,cancelled']]);
+        $purchaseOrder->update([
+            ...$data,
+            'fulfilled_at' => $data['status'] === 'fulfilled' ? ($purchaseOrder->fulfilled_at ?? now()) : null,
+        ]);
 
         return back()->with('status', 'Purchase order status updated.');
     }
@@ -177,11 +196,90 @@ class AdminOperationsController extends Controller
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
+        $wastageRows = $this->wastageReport($request);
+        $wastageSheet = $spreadsheet->createSheet();
+        $wastageSheet->setTitle('Wastage');
+        $wastageSheet->setCellValue('A1', 'BloomKeeper Wastage by Flower');
+        $wastageSheet->setCellValue('A2', "Report Period: {$reportPeriod}");
+        $wastageSheet->mergeCells('A1:D1');
+        $wastageSheet->mergeCells('A2:D2');
+        $wastageSheet->getStyle('A1')->getFont()->setBold(true);
+        $wastageSheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+        $wastageSheet->fromArray(['No.', 'Flower Type', 'Quantity Removed', 'Value Lost (RM)'], null, 'A4');
+        $wastageSheet->getStyle('A4:D4')->getFont()->setBold(true);
+        $wastageSheet->getStyle('A4:D4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('D5E4E1');
+
+        $wastageRowNumber = 5;
+
+        foreach ($wastageRows as $index => $row) {
+            $wastageSheet->fromArray([$index + 1, $row['flower_type'], $row['quantity'], $row['value_lost']], null, "A{$wastageRowNumber}");
+            $wastageRowNumber++;
+        }
+
+        $wastageSheet->fromArray([null, 'Total', array_sum(array_column($wastageRows, 'quantity')), round(array_sum(array_column($wastageRows, 'value_lost')), 2)], null, "A{$wastageRowNumber}");
+        $wastageSheet->getStyle("A{$wastageRowNumber}:D{$wastageRowNumber}")->getFont()->setBold(true);
+        $wastageSheet->getStyle("D5:D{$wastageRowNumber}")->getNumberFormat()->setFormatCode('#,##0.00');
+
+        foreach (range('A', 'D') as $column) {
+            $wastageSheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
         return response()->streamDownload(function () use ($spreadsheet): void {
             (new Xlsx($spreadsheet))->save('php://output');
         }, 'bloomkeeper-report.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
+    }
+
+    /**
+     * Validation rules shared by the add and edit stock forms.
+     *
+     * @return array<string, array<int, mixed>>
+     */
+    private function inventoryRules(): array
+    {
+        return [
+            'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:0'],
+            'unit_price' => ['required', 'numeric', 'min:0'], 'cost_price' => ['required', 'numeric', 'min:0'],
+            'date_received' => ['required', 'date'], 'shelf_life_days' => ['required', 'integer', 'min:1'],
+            'low_stock_threshold' => ['required', 'integer', 'min:0'],
+            'supplier_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'supplier')],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ];
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    private function approvedSuppliers(): Collection
+    {
+        return User::query()->where('role', 'supplier')->where('approval_status', 'approved')->orderBy('name')->get();
+    }
+
+    /**
+     * Wastage per flower for the requested date range, valued at cost price.
+     *
+     * @return array<int, array{flower_type: string, quantity: int, value_lost: float}>
+     */
+    private function wastageReport(Request $request): array
+    {
+        return StockAdjustment::query()->with('inventoryItem')
+            ->where('type', 'wastage')
+            ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('from')))
+            ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
+            ->get()
+            ->groupBy(fn (StockAdjustment $adjustment): string => $adjustment->inventoryItem->flower_type)
+            ->map(fn ($adjustments, string $flowerType): array => [
+                'flower_type' => $flowerType,
+                'quantity' => (int) $adjustments->sum(fn (StockAdjustment $adjustment): int => abs($adjustment->quantity_change)),
+                'value_lost' => round($adjustments->sum(fn (StockAdjustment $adjustment): float => abs($adjustment->quantity_change) * (float) $adjustment->inventoryItem->cost_price), 2),
+            ])
+            ->sortBy('flower_type', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
     }
 
     /**

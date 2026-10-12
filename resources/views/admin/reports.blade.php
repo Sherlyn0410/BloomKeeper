@@ -13,7 +13,7 @@
             ['label' => 'Flower types', 'value' => count($rows), 'note' => 'With orders in this period', 'tone' => 'text-[#1c9b5f]'],
             ['label' => 'Top seller', 'value' => $topSeller['flower_type'] ?? '-', 'note' => $topSeller ? number_format($topSeller['quantity']).' ordered' : 'No orders yet', 'tone' => 'text-[#d47f2a]'],
         ] as $stat)
-            <div class="rounded-3xl bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)]">
+            <div class="bk-card">
                 <p class="text-sm text-[#49665f]">{{ $stat['label'] }}</p>
                 <p class="mt-3 truncate text-3xl font-bold {{ $stat['tone'] }}">{{ $stat['value'] }}</p>
                 <p class="mt-2 text-sm text-[#607a72]">{{ $stat['note'] }}</p>
@@ -21,22 +21,22 @@
         @endforeach
     </div>
 
-    <section class="mt-6 rounded-[28px] bg-[#edf7f5]/90 p-5 shadow-[0_12px_30px_rgba(36,73,64,0.1)] sm:p-7">
+    <section class="bk-card mt-6">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <h2 class="font-serif text-2xl font-bold">Sales report</h2>
+                <h2 class="bk-card-title">Sales report</h2>
                 <p class="mt-1 text-sm text-[#607a72]">Report period: <span class="font-semibold text-[#203d37]">{{ $reportPeriod }}</span></p>
             </div>
-            <a href="{{ route('admin.reports.export', request()->query()) }}" class="rounded-lg bg-[#285443] px-3 py-2 text-sm font-semibold text-white transition hover:bg-[#1f4435]">Export Excel</a>
+            <a href="{{ route('admin.reports.export', request()->query()) }}" class="bk-btn bk-btn-primary">Export Excel</a>
         </div>
         <form class="mt-5 flex flex-wrap items-end gap-2">
-            <label class="flex flex-col gap-1 text-xs font-semibold text-[#49665f]">From<input name="from" value="{{ request('from') }}" type="date" class="rounded-lg border-0 p-2 text-sm font-normal"></label>
-            <label class="flex flex-col gap-1 text-xs font-semibold text-[#49665f]">To<input name="to" value="{{ request('to') }}" type="date" class="rounded-lg border-0 p-2 text-sm font-normal"></label>
+            <label class="bk-label">From<input name="from" value="{{ request('from') }}" type="date" class="bk-input"></label>
+            <label class="bk-label">To<input name="to" value="{{ request('to') }}" type="date" class="bk-input"></label>
             <input type="hidden" name="sort" value="{{ $sort }}">
             <input type="hidden" name="direction" value="{{ $direction }}">
-            <button class="rounded-lg bg-[#e3953d] px-3 py-2 font-semibold text-white transition hover:bg-[#d47f2a]">Run report</button>
+            <button class="bk-btn bk-btn-accent">Run report</button>
             @if (request()->hasAny(['from', 'to']))
-                <a href="{{ route('admin.reports', ['sort' => $sort, 'direction' => $direction]) }}" class="rounded-lg px-3 py-2 text-sm font-semibold text-[#49665f] transition hover:bg-[#dce9e6]">Clear</a>
+                <a href="{{ route('admin.reports', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
             @endif
         </form>
         <div class="mt-6 overflow-x-auto">
@@ -81,6 +81,50 @@
                             <td class="pt-4"></td>
                             <td class="pt-4 text-right">{{ number_format($totalSales, 2) }}</td>
                             <td class="pt-4 pl-6">100.00%</td>
+                        </tr>
+                    </tfoot>
+                @endif
+            </table>
+        </div>
+    </section>
+
+    <section class="bk-card mt-6">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+            <div>
+                <h2 class="bk-card-title">Wastage by flower</h2>
+                <p class="mt-1 text-sm text-[#607a72]">Stock removed as wastage in the same period, valued at cost price.</p>
+            </div>
+            <a href="{{ route('admin.wastage', request()->only(['from', 'to'])) }}" class="text-sm font-semibold text-[#285443] underline underline-offset-4">View wastage history</a>
+        </div>
+        <div class="mt-6 overflow-x-auto">
+            <table class="w-full min-w-[480px] text-left text-sm">
+                <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
+                    <tr>
+                        <th class="pb-3">No.</th>
+                        <th class="pb-3">Flower type</th>
+                        <th class="pb-3 text-right">Quantity removed</th>
+                        <th class="pb-3 text-right">Value lost (RM)</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-[#dce9e6]">
+                    @forelse ($wastageRows as $row)
+                        <tr>
+                            <td class="py-4 text-[#607a72]">{{ $loop->iteration }}</td>
+                            <td class="py-4 font-semibold">{{ $row['flower_type'] }}</td>
+                            <td class="py-4 text-right font-semibold">{{ number_format($row['quantity']) }}</td>
+                            <td class="py-4 text-right font-semibold text-[#b84331]">{{ number_format($row['value_lost'], 2) }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="4" class="py-8 text-center text-sm text-[#607a72]">No wastage recorded in this date range.</td></tr>
+                    @endforelse
+                </tbody>
+                @if (count($wastageRows) > 0)
+                    <tfoot class="border-t-2 border-[#d4e4e0] font-bold">
+                        <tr>
+                            <td class="pt-4"></td>
+                            <td class="pt-4">Total</td>
+                            <td class="pt-4 text-right">{{ number_format(array_sum(array_column($wastageRows, 'quantity'))) }}</td>
+                            <td class="pt-4 text-right">{{ number_format(array_sum(array_column($wastageRows, 'value_lost')), 2) }}</td>
                         </tr>
                     </tfoot>
                 @endif

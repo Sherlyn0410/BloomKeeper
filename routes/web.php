@@ -4,6 +4,10 @@ use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminOperationsController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\StaffCustomerController;
+use App\Http\Controllers\StaffOrderController;
+use App\Http\Controllers\WastageController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -64,6 +68,25 @@ Route::middleware('auth')->group(function (): void {
     })->name('dashboard.user');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
+    Route::middleware(['verified', 'can:manage-customers'])->prefix('staff')->name('staff.')->group(function (): void {
+        Route::get('/customers', [StaffCustomerController::class, 'index'])->name('customers.index');
+        Route::post('/customers', [StaffCustomerController::class, 'store'])->name('customers.store');
+        Route::get('/orders', [StaffOrderController::class, 'index'])->name('orders.index');
+        Route::get('/orders/create', [StaffOrderController::class, 'create'])->name('orders.create');
+        Route::post('/orders', [StaffOrderController::class, 'store'])->name('orders.store');
+        Route::get('/orders/{customerOrder}/edit', [StaffOrderController::class, 'edit'])->name('orders.edit');
+        Route::put('/orders/{customerOrder}', [StaffOrderController::class, 'update'])->name('orders.update');
+        Route::delete('/orders/{customerOrder}', [StaffOrderController::class, 'destroy'])->name('orders.destroy');
+        Route::get('/wastage', [WastageController::class, 'create'])->name('wastage.create');
+        Route::post('/wastage', [WastageController::class, 'store'])->name('wastage.store');
+    });
+
+    Route::middleware(['verified', 'can:use-workspace'])->group(function (): void {
+        Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+        Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
+    });
+
     Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function (): void {
         Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
         Route::get('/users', [AdminUserController::class, 'users'])->name('users');
@@ -78,6 +101,7 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/orders', [AdminOperationsController::class, 'orders'])->name('orders');
         Route::get('/purchase-orders', [AdminOperationsController::class, 'purchaseOrders'])->name('purchase-orders');
         Route::get('/reports', [AdminOperationsController::class, 'reports'])->name('reports');
+        Route::get('/wastage', [AdminOperationsController::class, 'wastage'])->name('wastage');
         Route::post('/inventory', [AdminOperationsController::class, 'storeInventory'])->name('inventory.store');
         Route::put('/inventory/{inventoryItem}', [AdminOperationsController::class, 'updateInventory'])->name('inventory.update');
         Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
