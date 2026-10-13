@@ -129,10 +129,6 @@ class AdminOperationsController extends Controller
     {
         $data = $request->validate(['status' => ['required', 'in:pending,ready,completed,cancelled']]);
 
-        if ($customerOrder->status === 'cancelled') {
-            return back()->withErrors(['status' => "Order {$customerOrder->order_number} is cancelled, so its status can't be changed here. Use Edit to reopen it."]);
-        }
-
         DB::transaction(function () use ($customerOrder, $data, $request): void {
             $previousStatus = $customerOrder->status;
             $customerOrder->update($data);

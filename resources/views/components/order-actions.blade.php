@@ -7,7 +7,9 @@
     </span>
 @else
     <div {{ $attributes->merge(['class' => 'flex items-center gap-3 text-xs font-semibold']) }}>
-        <a href="{{ route('staff.orders.edit', $order) }}" class="text-[#285443] underline underline-offset-2">Edit</a>
+        @if ($order->canBeEdited())
+            <a href="{{ route('staff.orders.edit', $order) }}" class="text-[#285443] underline underline-offset-2">Edit</a>
+        @endif
         @if ($order->canBeDeleted())
             <form method="POST" action="{{ route('staff.orders.destroy', $order) }}" onsubmit="return confirm(@js("Delete order {$order->order_number}? This cannot be undone."))">
                 @csrf

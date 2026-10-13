@@ -126,6 +126,8 @@ test('order cards only offer delete for pending and cancelled orders', function 
         ->assertSee('action="'.route('staff.orders.destroy', $cancelled).'"', false)
         ->assertDontSee('action="'.route('staff.orders.destroy', $ready).'"', false)
         ->assertSee(route('staff.orders.edit', $ready))
+        ->assertSee(route('staff.orders.edit', $pending))
+        ->assertDontSee(route('staff.orders.edit', $cancelled))
         ->assertDontSee('Cancel order');
 });
 

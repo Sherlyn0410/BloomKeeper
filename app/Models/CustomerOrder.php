@@ -45,6 +45,14 @@ class CustomerOrder extends Model
     }
 
     /**
+     * Only open orders can be edited; completed orders are final and cancelled orders can only be deleted.
+     */
+    public function canBeEdited(): bool
+    {
+        return in_array($this->status, ['pending', 'ready'], true);
+    }
+
+    /**
      * Only orders that were never prepared (pending) or are already cancelled can be deleted.
      */
     public function canBeDeleted(): bool

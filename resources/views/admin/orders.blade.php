@@ -117,7 +117,7 @@
                             </div>
                             @if ($order->status === 'cancelled')
                                 <label class="sr-only" for="order-status-{{ $order->id }}">Status</label>
-                                <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't change status here. Use Edit to reopen the order." class="bk-input bk-input-sm cursor-not-allowed bg-[#eef3f1] text-[#8aa39c] shadow-none">
+                                <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't be changed. They can only be deleted." class="bk-input bk-input-sm cursor-not-allowed bg-[#eef3f1] text-[#8aa39c] shadow-none">
                                     <option>Cancelled</option>
                                 </select>
                             @elseif (! $order->isLocked())

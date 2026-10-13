@@ -99,32 +99,33 @@ test('changing only the status does not move stock', function () {
         ->and($this->roses->refresh()->quantity)->toBe(6);
 });
 
-test('cancelling returns the stock and reopening takes it again', function () {
+test('cancelling returns the stock', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $order = placeOrder([['flower_type' => 'Roses', 'quantity' => 4]]);
 
     $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'cancelled']);
+
     expect($this->roses->refresh()->quantity)->toBe(10)
         ->and($order->heldStock()->all())->toBe([]);
-
-    $this->actingAs($admin)
-        ->put(route('staff.orders.update', $order), orderPayload([['flower_type' => 'Roses', 'quantity' => 4]], ['status' => 'pending']))
-        ->assertSessionHasNoErrors();
-    expect($this->roses->refresh()->quantity)->toBe(6);
 });
 
-test('a cancelled order cannot be reopened when its flowers have sold out', function () {
+test('cancelled orders cannot be edited or reopened, only deleted', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $order = placeOrder([['flower_type' => 'Roses', 'quantity' => 4]]);
     $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'cancelled']);
-    placeOrder([['flower_type' => 'Roses', 'quantity' => 8]]);
 
+    $this->actingAs($admin)->get(route('staff.orders.edit', $order))->assertForbidden();
     $this->actingAs($admin)
         ->put(route('staff.orders.update', $order), orderPayload([['flower_type' => 'Roses', 'quantity' => 4]], ['status' => 'pending']))
-        ->assertSessionHasErrors('items');
+        ->assertForbidden();
+    $this->actingAs($admin)->get(route('admin.orders'))
+        ->assertDontSee(route('staff.orders.edit', $order))
+        ->assertSee('action="'.route('staff.orders.destroy', $order).'"', false);
 
-    expect($order->refresh()->status)->toBe('cancelled')
-        ->and($this->roses->refresh()->quantity)->toBe(2);
+    $this->actingAs($admin)->delete(route('staff.orders.destroy', $order))->assertRedirect();
+
+    expect(CustomerOrder::find($order->id))->toBeNull()
+        ->and($this->roses->refresh()->quantity)->toBe(10);
 });
 
 test('deleting a pending order returns its stock', function () {
@@ -206,7 +207,7 @@ test('the status dropdown is disabled for cancelled orders and the server refuse
 
     $this->actingAs($admin)
         ->patch(route('admin.orders.status', $order), ['status' => 'pending'])
-        ->assertSessionHasErrors('status');
+        ->assertForbidden();
 
     expect($order->refresh()->status)->toBe('cancelled')
         ->and($this->roses->refresh()->quantity)->toBe(10);
