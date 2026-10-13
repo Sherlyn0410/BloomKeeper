@@ -8,7 +8,7 @@
     title="Wastage Report"
     description="See which flowers were lost to wastage, why, and what it cost over a date range."
 >
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         @foreach ([
             ['label' => 'Value lost', 'value' => 'RM '.number_format($totalValueLost, 2), 'note' => 'At the cost when recorded', 'tone' => 'text-[#b84331]'],
             ['label' => 'Stems removed', 'value' => number_format($totalQuantity), 'note' => 'Across all flowers', 'tone' => 'text-[#203d37]'],
@@ -17,7 +17,7 @@
         ] as $stat)
             <div class="bk-card">
                 <p class="text-sm text-[#49665f]">{{ $stat['label'] }}</p>
-                <p class="mt-3 truncate text-3xl font-bold {{ $stat['tone'] }}">{{ $stat['value'] }}</p>
+                <p class="mt-3 truncate text-2xl font-bold sm:text-3xl {{ $stat['tone'] }}">{{ $stat['value'] }}</p>
                 <p class="mt-2 text-sm text-[#607a72]">{{ $stat['note'] }}</p>
             </div>
         @endforeach

@@ -30,17 +30,17 @@
     </div>
 
     <div class="mt-5 overflow-x-auto">
-        <table class="w-full min-w-[760px] table-fixed text-left text-sm">
+        <table class="w-full min-w-[480px] table-fixed text-left text-sm md:min-w-[760px]">
             <colgroup>
-                <col class="w-[38%]">
-                <col class="w-[16%]">
-                <col class="w-[16%]">
-                <col class="w-[30%]">
+                <col class="w-[45%] md:w-[38%]">
+                <col class="hidden w-[16%] md:table-column">
+                <col class="w-[20%] md:w-[16%]">
+                <col class="w-[35%] md:w-[30%]">
             </colgroup>
             <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                 <tr>
                     <th class="px-3 pb-4 font-medium">User</th>
-                    <th class="px-3 pb-4 font-medium">Joined</th>
+                    <th class="hidden px-3 pb-4 font-medium md:table-cell">Joined</th>
                     <th class="px-3 pb-4 font-medium">Status</th>
                     <th class="px-3 pb-4 text-right font-medium">Actions</th>
                 </tr>
@@ -61,7 +61,7 @@
                             {{ $user->name }}
                             <span class="block truncate text-xs font-normal text-[#607a72]">{{ $user->email }}</span>
                         </td>
-                        <td class="px-3 py-5 text-[#607a72]">{{ $user->created_at->format('d M Y') }}</td>
+                        <td class="hidden px-3 py-5 text-[#607a72] md:table-cell">{{ $user->created_at->format('d M Y') }}</td>
                         <td class="px-3 py-5">
                             <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $statusStyles[$user->approval_status] ?? 'bg-[#f5dcd7] text-[#b84331]' }}">
                                 {{ str($user->approval_status)->headline() }}

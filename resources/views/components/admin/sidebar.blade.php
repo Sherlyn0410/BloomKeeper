@@ -28,8 +28,4 @@
 
 @endphp
 
-@if ($mobile)
-    <x-mobile-nav :navigation="$navigation" />
-@else
-    <x-sidebar :navigation="$navigation" subtitle="Admin console" role-label="Administrator" home-route="admin.dashboard" />
-@endif
+<x-sidebar :navigation="$navigation" subtitle="Admin console" role-label="Administrator" home-route="admin.dashboard" :mobile="$mobile" />

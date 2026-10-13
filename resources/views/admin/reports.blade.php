@@ -6,7 +6,7 @@
     title="Sales Report"
     description="Summarize flower demand and sales over a collection-date range and export the results for review."
 >
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         @foreach ([
             ['label' => 'Total sales', 'value' => 'RM '.number_format($totalSales, 2), 'note' => 'Excludes cancelled orders', 'tone' => 'text-[#285443]'],
             ['label' => 'Gross profit', 'value' => 'RM '.number_format($totalProfit, 2), 'note' => ($totalSales > 0 ? number_format($totalProfit / $totalSales * 100, 1).'% margin' : 'No sales yet').' · cost RM '.number_format($totalCost, 2), 'tone' => $totalProfit < 0 ? 'text-[#b84331]' : 'text-[#1c9b5f]'],
@@ -15,7 +15,7 @@
         ] as $stat)
             <div class="bk-card">
                 <p class="text-sm text-[#49665f]">{{ $stat['label'] }}</p>
-                <p class="mt-3 truncate text-3xl font-bold {{ $stat['tone'] }}">{{ $stat['value'] }}</p>
+                <p class="mt-3 truncate text-2xl font-bold sm:text-3xl {{ $stat['tone'] }}">{{ $stat['value'] }}</p>
                 <p class="mt-2 text-sm text-[#607a72]">{{ $stat['note'] }}</p>
             </div>
         @endforeach

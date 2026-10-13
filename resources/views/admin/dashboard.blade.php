@@ -8,8 +8,9 @@
             @vite(['resources/css/app.css', 'resources/js/app.js'])
         @endif
     </head>
-    <body class="h-screen overflow-hidden bg-[#c4e6e1] font-sans text-[#203d37]">
-        <div class="mx-auto flex h-screen w-full max-w-[1500px] gap-4 overflow-hidden p-3 sm:gap-6 sm:p-6">
+    <body class="flex h-screen flex-col overflow-hidden bg-[#c4e6e1] font-sans text-[#203d37]">
+        <x-admin.sidebar mobile />
+        <div class="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 gap-4 overflow-hidden p-3 sm:gap-6 sm:p-6">
             <x-admin.sidebar />
 
             <main class="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
@@ -44,15 +45,25 @@
                             <a href="{{ route('admin.users', ['role' => 'staff']) }}" class="text-[#285443] underline underline-offset-4">Manage users</a>
                         </div>
                     </div>
-                    <div class="mt-6 overflow-hidden">
-                        <table class="w-full table-fixed text-left text-sm">
+                    <div class="mt-6 overflow-x-auto">
+                        <table class="w-full min-w-[640px] table-fixed text-left text-sm">
+                            <colgroup>
+                                <col class="w-[36%]">
+                                <col class="w-[14%]">
+                                <col class="w-[15%]">
+                                <col class="w-[15%]">
+                                <col class="w-[20%]">
+                            </colgroup>
                             <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
-                                <tr><th class="pb-3 font-medium">Name</th><th class="pb-3 font-medium">Account type</th><th class="pb-3 font-medium">Joined</th><th class="pb-3 font-medium">Status</th><th class="pb-3 text-right font-medium">Action</th></tr>
+                                <tr><th class="pb-3 font-medium">Name</th><th class="pb-3 font-medium">Type</th><th class="pb-3 font-medium">Joined</th><th class="pb-3 font-medium">Status</th><th class="pb-3 text-right font-medium">Action</th></tr>
                             </thead>
                             <tbody class="divide-y divide-[#dce9e6]">
                                 @forelse ($recentUsers as $user)
                                     <tr>
-                                        <td class="py-4 font-semibold">{{ $user->name }}<span class="block text-xs font-normal text-[#607a72]">{{ $user->email }}</span></td>
+                                        <td class="py-4 pr-4">
+                                            <span class="block truncate font-semibold" title="{{ $user->name }}">{{ $user->name }}</span>
+                                            <span class="block truncate text-xs text-[#607a72]" title="{{ $user->email }}">{{ $user->email }}</span>
+                                        </td>
                                         <td class="py-4">{{ str($user->role)->headline() }}</td>
                                         <td class="py-4 text-[#607a72]">{{ $user->created_at->format('d M Y') }}</td>
                                         <td class="py-4"><span class="rounded-full px-3 py-1 text-xs font-semibold {{ $user->approval_status === 'approved' ? 'bg-[#d7f0df] text-[#187849]' : ($user->approval_status === 'pending' ? 'bg-[#fff0d5] text-[#a76513]' : 'bg-[#f5dcd7] text-[#b84331]') }}">{{ str($user->approval_status)->headline() }}</span></td>

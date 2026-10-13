@@ -1,6 +1,6 @@
 @props(['alerts'])
 
-<aside class="bk-card">
+<aside class="bk-card min-w-0">
     <h2 class="bk-card-title">Quick alerts</h2>
     <div class="mt-5 space-y-3">
         @forelse ($alerts as $alert)

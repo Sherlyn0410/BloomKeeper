@@ -18,8 +18,4 @@
     }
 @endphp
 
-@if ($mobile)
-    <x-mobile-nav :navigation="$navigation" />
-@else
-    <x-sidebar :navigation="$navigation" subtitle="{{ ucfirst(auth()->user()->role) }} workspace" role-label="{{ ucfirst(auth()->user()->role) }}" home-route="dashboard" />
-@endif
+<x-sidebar :navigation="$navigation" subtitle="{{ ucfirst(auth()->user()->role) }} workspace" role-label="{{ ucfirst(auth()->user()->role) }}" home-route="dashboard" :mobile="$mobile" />

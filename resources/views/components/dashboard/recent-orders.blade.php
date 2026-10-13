@@ -1,6 +1,6 @@
 @props(['orders', 'viewAllUrl'])
 
-<section class="bk-card">
+<section class="bk-card min-w-0">
     <div class="flex items-center justify-between gap-4">
         <div>
             <h2 class="bk-card-title">Recent orders</h2>
@@ -8,8 +8,8 @@
         </div>
         <a href="{{ $viewAllUrl }}" class="text-sm font-semibold text-[#285443] underline underline-offset-4">View all</a>
     </div>
-    <div class="mt-6 overflow-hidden">
-        <table class="w-full table-fixed text-left text-sm">
+    <div class="mt-6 overflow-x-auto">
+        <table class="w-full min-w-[560px] table-fixed text-left text-sm">
             <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                 <tr><th class="w-3/10 pb-3 font-medium">Customer</th><th class="w-4/10 pb-3 font-medium">Items</th><th class="pb-3 font-medium">Date</th><th class="pb-3 font-medium">Status</th></tr>
             </thead>

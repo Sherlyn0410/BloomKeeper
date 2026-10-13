@@ -13,20 +13,18 @@
             @vite(['resources/css/app.css', 'resources/js/app.js'])
         @endif
     </head>
-    <body class="h-screen overflow-hidden bg-[#c4e6e1] font-sans text-[#203d37]">
-        <div class="mx-auto flex h-screen w-full max-w-[1500px] gap-4 overflow-hidden p-3 sm:gap-6 sm:p-6">
+    <body class="flex h-screen flex-col overflow-hidden bg-[#c4e6e1] font-sans text-[#203d37]">
+        <x-admin.sidebar mobile />
+        <div class="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 gap-4 overflow-hidden p-3 sm:gap-6 sm:p-6">
             <x-admin.sidebar />
             <main class="min-w-0 flex-1 overflow-y-auto overflow-x-hidden py-2 lg:py-4">
-                <div class="px-1 sm:px-3">
-                    <x-admin.sidebar mobile />
-                </div>
-                <header class="mt-2 flex flex-wrap items-end justify-between gap-4 px-1 sm:px-3 lg:mt-0">
+                <header class="flex flex-wrap items-end justify-between gap-4 px-1 sm:px-3">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#49665f]">Administrator view</p>
                         <h1 class="mt-2 font-serif text-3xl font-bold tracking-tight sm:text-4xl">{{ $title }}</h1>
                         <p class="mt-2 max-w-2xl text-sm text-[#607a72]">{{ $description }}</p>
                     </div>
-                    <a href="{{ route('admin.dashboard') }}" class="bk-btn bk-btn-secondary">Back to dashboard</a>
+                    <a href="{{ route('admin.dashboard') }}" class="bk-btn bk-btn-secondary hidden sm:inline-flex">Back to dashboard</a>
                 </header>
 
                 @if (session('status'))
