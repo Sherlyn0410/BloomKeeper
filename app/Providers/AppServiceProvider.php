@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\StockAdjustment;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -27,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::define('manage-users', fn (User $user): bool => $user->role === 'admin');
         Gate::define('use-workspace', fn (User $user): bool => $user->approval_status === 'approved');
+        Gate::define('edit-wastage', fn (User $user, StockAdjustment $adjustment): bool => $adjustment->isWastageEditableBy($user));
         Gate::define('manage-customers', fn (User $user): bool => in_array($user->role, ['admin', 'staff'], true) && $user->approval_status === 'approved');
 
         RateLimiter::for('auth', function (Request $request): Limit {

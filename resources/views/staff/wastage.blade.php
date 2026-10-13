@@ -41,9 +41,9 @@
     <section class="bk-card">
         <h2 class="bk-card-title">Recent wastage</h2>
         <div class="mt-4 overflow-x-auto">
-            <table class="w-full min-w-[560px] text-left text-sm">
+            <table class="w-full min-w-[640px] text-left text-sm">
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
-                    <tr><th class="pb-3">Date</th><th class="pb-3">Flower</th><th class="pb-3 text-right">Removed</th><th class="pb-3 pl-6">Reason</th><th class="pb-3">By</th></tr>
+                    <tr><th class="pb-3">Date</th><th class="pb-3">Flower</th><th class="pb-3 text-right">Removed</th><th class="pb-3 pl-6">Reason</th><th class="pb-3">By</th><th class="pb-3 text-right">Actions</th></tr>
                 </thead>
                 <tbody class="divide-y divide-[#dce9e6]">
                     @forelse ($recentWastage as $adjustment)
@@ -53,9 +53,10 @@
                             <td class="py-3 text-right font-semibold text-[#b84331]">{{ abs($adjustment->quantity_change) }}</td>
                             <td class="py-3 pl-6 capitalize">{{ $adjustment->reason }}</td>
                             <td class="py-3 text-[#607a72]">{{ $adjustment->user->name }}</td>
+                            <td class="py-3"><x-wastage-actions :adjustment="$adjustment" /></td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="py-8 text-center text-[#607a72]">No wastage recorded yet.</td></tr>
+                        <tr><td colspan="6" class="py-8 text-center text-[#607a72]">No wastage recorded yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

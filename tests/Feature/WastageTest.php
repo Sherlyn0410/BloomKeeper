@@ -140,3 +140,85 @@ test('the sales export only contains the sales sheet', function () {
     expect($spreadsheet->getSheetCount())->toBe(1)
         ->and($spreadsheet->getActiveSheet()->getTitle())->toBe('Sales Report');
 });
+
+test('staff can correct their own wastage record and stock is adjusted by the difference', function () {
+    $adjustment = $this->item->recordWastage($this->staff, 5, 'expired');
+
+    $this->actingAs($this->staff)->get(route('staff.wastage.edit', $adjustment))->assertOk()->assertSee('Edit wastage record');
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.wastage.update', $adjustment), ['inventory_item_id' => $this->item->id, 'quantity' => 3, 'reason' => 'damaged', 'notes' => 'Miscounted'])
+        ->assertRedirect(route('staff.wastage.create'))
+        ->assertSessionHasNoErrors();
+
+    expect($this->item->refresh()->quantity)->toBe(7)
+        ->and($adjustment->refresh())
+        ->quantity_change->toBe(-3)
+        ->reason->toBe('damaged')
+        ->notes->toBe('Miscounted');
+});
+
+test('correcting wastage to a different flower moves the stock between batches', function () {
+    $roses = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 8, 'unit_price' => 2.50, 'cost_price' => 1.00, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $adjustment = $this->item->recordWastage($this->staff, 4, 'expired');
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.wastage.update', $adjustment), ['inventory_item_id' => $roses->id, 'quantity' => 4, 'reason' => 'expired']);
+
+    expect($this->item->refresh()->quantity)->toBe(10)
+        ->and($roses->refresh()->quantity)->toBe(4)
+        ->and($adjustment->refresh()->unit_cost)->toBe('1.00');
+});
+
+test('a correction cannot remove more than the available stock', function () {
+    $adjustment = $this->item->recordWastage($this->staff, 4, 'expired');
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.wastage.update', $adjustment), ['inventory_item_id' => $this->item->id, 'quantity' => 11, 'reason' => 'expired'])
+        ->assertSessionHasErrors('quantity');
+
+    expect($this->item->refresh()->quantity)->toBe(6)
+        ->and($adjustment->refresh()->quantity_change)->toBe(-4);
+});
+
+test('deleting a wastage record returns its stems to stock', function () {
+    $adjustment = $this->item->recordWastage($this->staff, 4, 'expired');
+
+    $this->actingAs($this->staff)->delete(route('staff.wastage.destroy', $adjustment))->assertRedirect();
+
+    expect(StockAdjustment::find($adjustment->id))->toBeNull()
+        ->and($this->item->refresh()->quantity)->toBe(10);
+});
+
+test('staff cannot change their wastage records after 24 hours', function () {
+    $adjustment = $this->item->recordWastage($this->staff, 4, 'expired');
+    $this->travel(25)->hours();
+
+    $this->actingAs($this->staff)->get(route('staff.wastage.edit', $adjustment))->assertForbidden();
+    $this->actingAs($this->staff)->delete(route('staff.wastage.destroy', $adjustment))->assertForbidden();
+    $this->actingAs($this->staff)->get(route('staff.wastage.create'))->assertSee('Locked');
+
+    expect($this->item->refresh()->quantity)->toBe(6);
+});
+
+test('staff cannot change another staff member\'s wastage record', function () {
+    $adjustment = $this->item->recordWastage(User::factory()->create(['role' => 'staff']), 4, 'expired');
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.wastage.update', $adjustment), ['inventory_item_id' => $this->item->id, 'quantity' => 1, 'reason' => 'expired'])
+        ->assertForbidden();
+});
+
+test('admins can correct any wastage record at any time', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $adjustment = $this->item->recordWastage($this->staff, 4, 'expired');
+    $this->travel(30)->days();
+
+    $this->actingAs($admin)->get(route('admin.wastage'))->assertSee(route('staff.wastage.edit', $adjustment));
+
+    $this->actingAs($admin)
+        ->put(route('staff.wastage.update', $adjustment), ['inventory_item_id' => $this->item->id, 'quantity' => 2, 'reason' => 'other'])
+        ->assertRedirect(route('admin.wastage'));
+
+    expect($this->item->refresh()->quantity)->toBe(8);
+});

@@ -19,7 +19,7 @@
             @endif
         </form>
         <div class="mt-6 overflow-x-auto">
-            <table class="w-full min-w-[760px] text-left text-sm">
+            <table class="w-full min-w-[840px] text-left text-sm">
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                     <tr>
                         <th class="pb-3">Date</th>
@@ -28,6 +28,7 @@
                         <th class="pb-3 pl-6">Reason</th>
                         <th class="pb-3">Notes</th>
                         <th class="pb-3">Recorded by</th>
+                        <th class="pb-3 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#dce9e6]">
@@ -39,9 +40,10 @@
                             <td class="py-4 pl-6"><span class="rounded-full bg-[#f5dcd7] px-2.5 py-0.5 text-xs font-semibold capitalize text-[#b84331]">{{ $adjustment->reason }}</span></td>
                             <td class="max-w-xs py-4 text-[#607a72]">{{ $adjustment->notes ?? '-' }}</td>
                             <td class="py-4 text-[#607a72]">{{ $adjustment->user->name }}</td>
+                            <td class="py-4"><x-wastage-actions :adjustment="$adjustment" /></td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="py-8 text-center text-sm text-[#607a72]">No wastage recorded for this period.</td></tr>
+                        <tr><td colspan="7" class="py-8 text-center text-sm text-[#607a72]">No wastage recorded for this period.</td></tr>
                     @endforelse
                 </tbody>
             </table>

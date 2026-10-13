@@ -79,6 +79,11 @@ Route::middleware('auth')->group(function (): void {
         Route::delete('/orders/{customerOrder}', [StaffOrderController::class, 'destroy'])->name('orders.destroy');
         Route::get('/wastage', [WastageController::class, 'create'])->name('wastage.create');
         Route::post('/wastage', [WastageController::class, 'store'])->name('wastage.store');
+        Route::middleware('can:edit-wastage,stockAdjustment')->group(function (): void {
+            Route::get('/wastage/{stockAdjustment}/edit', [WastageController::class, 'edit'])->name('wastage.edit');
+            Route::put('/wastage/{stockAdjustment}', [WastageController::class, 'update'])->name('wastage.update');
+            Route::delete('/wastage/{stockAdjustment}', [WastageController::class, 'destroy'])->name('wastage.destroy');
+        });
     });
 
     Route::middleware(['verified', 'can:use-workspace'])->group(function (): void {
