@@ -96,7 +96,7 @@ class StaffOrderController extends Controller
     }
 
     /**
-     * @return array{customers: EloquentCollection<int, Customer>, flowerStock: Collection<string, int>}
+     * @return array{customers: EloquentCollection<int, Customer>, flowerStock: Collection<string, int>, flowerPrices: Collection<string, string>}
      */
     private function formData(): array
     {
@@ -104,6 +104,7 @@ class StaffOrderController extends Controller
             'customers' => Customer::query()->orderBy('name')->get(),
             'flowerStock' => InventoryItem::query()->selectRaw('flower_type, SUM(quantity) as available')
                 ->groupBy('flower_type')->orderBy('flower_type')->pluck('available', 'flower_type'),
+            'flowerPrices' => InventoryItem::query()->orderBy('date_received')->pluck('unit_price', 'flower_type'),
         ];
     }
 

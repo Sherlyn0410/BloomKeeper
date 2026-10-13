@@ -82,6 +82,15 @@ test('staff can edit an order and existing item prices are kept', function () {
         ->and($order->items->pluck('quantity', 'flower_type')->all())->toBe(['Roses' => 10, 'Lilies' => 2]);
 });
 
+test('the order form estimates with current prices but keeps prices already on the order', function () {
+    $this->actingAs($this->staff)->get(route('staff.orders.create'))
+        ->assertSee('value="Roses" data-price="2.50"', false);
+
+    $this->actingAs($this->staff)->get(route('staff.orders.edit', makeOrder()))
+        ->assertSee('value="Roses" data-price="2.00"', false)
+        ->assertSee('value="Lilies" data-price="3.25"', false);
+});
+
 test('pending orders are deleted', function () {
     $order = makeOrder();
 
