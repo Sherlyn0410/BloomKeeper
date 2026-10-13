@@ -25,6 +25,19 @@ class InventoryItem extends Model
         return $this->belongsTo(User::class, 'supplier_id');
     }
 
+    public function isLowStock(): bool
+    {
+        return $this->quantity <= $this->low_stock_threshold;
+    }
+
+    /**
+     * Stock that spoils within the next two days needs attention.
+     */
+    public function isNearSpoilage(): bool
+    {
+        return $this->spoilageDate()->lte(now()->addDays(2));
+    }
+
     public function spoilageDate(): Carbon
     {
         return $this->date_received->copy()->addDays($this->shelf_life_days);

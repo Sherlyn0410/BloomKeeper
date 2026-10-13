@@ -6,13 +6,13 @@ use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StaffCustomerController;
+use App\Http\Controllers\StaffDashboardController;
 use App\Http\Controllers\StaffOrderController;
 use App\Http\Controllers\WastageController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
 
@@ -43,26 +43,7 @@ Route::middleware('auth')->group(function (): void {
 
         return back()->with('status', 'A verification link has been sent to your email address.');
     })->middleware('throttle:6,1')->name('verification.send');
-    Route::get('/dashboard', function (): Response|RedirectResponse {
-        if (! auth()->user()->hasVerifiedEmail()) {
-            return redirect()->route('verification.notice');
-        }
-
-        if (auth()->user()->approval_status !== 'approved') {
-            Auth::logout();
-
-            return redirect()->route('login')->withErrors(['email' => 'Your account still needs administrator approval.']);
-        }
-
-        if (auth()->user()->role === 'admin') {
-            return redirect()->route('admin.dashboard');
-        }
-
-        return response()
-            ->view('dashboard')
-            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-            ->header('Pragma', 'no-cache');
-    })->name('dashboard');
+    Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
     Route::get('/workspace', function (): Response|RedirectResponse {
         return redirect()->route('dashboard');
     })->name('dashboard.user');

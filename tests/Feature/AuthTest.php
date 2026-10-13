@@ -3,7 +3,9 @@
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
 
 test('a guest can view the login and signup pages', function () {
     $this->get(route('login'))
@@ -214,4 +216,60 @@ test('a guest can request a password reset link', function () {
     $response->assertRedirect(route('password.request'));
     $response->assertSessionHas('status', 'We sent a password reset link to your email address.');
     Notification::assertSentTo($user, ResetPassword::class);
+});
+
+test('a user can reset their password with a valid reset link', function () {
+    $user = User::factory()->create(['email' => 'reset@example.com']);
+    $token = Password::createToken($user);
+
+    $this->post(route('password.update'), [
+        'token' => $token,
+        'email' => 'reset@example.com',
+        'password' => 'brand-new-password',
+        'password_confirmation' => 'brand-new-password',
+    ])->assertRedirect(route('login'));
+
+    $user->refresh();
+    expect(Hash::check('brand-new-password', $user->password))->toBeTrue()
+        ->and($user->remember_token)->not->toBeNull();
+});
+
+test('signing in never keeps the user remembered', function () {
+    $user = User::factory()->create(['email' => 'remember@example.com', 'remember_token' => null]);
+
+    $response = $this->post(route('login.store'), ['email' => 'remember@example.com', 'password' => 'password', 'remember' => '1']);
+
+    $response->assertRedirect();
+    expect(collect($response->headers->getCookies())->contains(fn ($cookie) => str_starts_with($cookie->getName(), 'remember_web_')))->toBeFalse()
+        ->and($user->refresh()->remember_token)->toBeNull();
+});
+
+test('staff are not sent to an admin page left over from an earlier sign-in attempt', function () {
+    User::factory()->create(['email' => 'staff@example.com', 'role' => 'staff']);
+
+    $this->get(route('admin.dashboard'))->assertRedirect(route('login'));
+
+    $this->post(route('login.store'), ['email' => 'staff@example.com', 'password' => 'password'])
+        ->assertRedirect(route('dashboard'));
+});
+
+test('users are returned to the page they were trying to open when they are allowed to see it', function (string $role, string $page) {
+    User::factory()->create(['email' => 'user@example.com', 'role' => $role]);
+
+    $this->get(route($page))->assertRedirect(route('login'));
+
+    $this->post(route('login.store'), ['email' => 'user@example.com', 'password' => 'password'])
+        ->assertRedirect(route($page));
+})->with([
+    'admin to an admin page' => ['admin', 'admin.inventory'],
+    'staff to a staff page' => ['staff', 'staff.orders.index'],
+]);
+
+test('suppliers are not sent to a staff page after signing in', function () {
+    User::factory()->create(['email' => 'supplier@example.com', 'role' => 'supplier']);
+
+    $this->get(route('staff.orders.index'))->assertRedirect(route('login'));
+
+    $this->post(route('login.store'), ['email' => 'supplier@example.com', 'password' => 'password'])
+        ->assertRedirect(route('dashboard'));
 });

@@ -39,21 +39,12 @@
                 @endforeach
             </ul>
         @endif
-        <form method="POST" action="{{ route('profile.password') }}" class="mt-5 grid gap-3 sm:grid-cols-3">
+        <form method="POST" action="{{ route('profile.password') }}" class="mt-5 grid items-start gap-3 sm:grid-cols-3">
             @csrf
             @method('PUT')
-            <label class="{{ $labelClass }}">
-                Current password
-                <input name="current_password" type="password" required autocomplete="current-password" class="{{ $inputClass }}">
-            </label>
-            <label class="{{ $labelClass }}">
-                New password
-                <input name="password" type="password" required minlength="8" autocomplete="new-password" class="{{ $inputClass }}">
-            </label>
-            <label class="{{ $labelClass }}">
-                Confirm new password
-                <input name="password_confirmation" type="password" required minlength="8" autocomplete="new-password" class="{{ $inputClass }}">
-            </label>
+            <x-password-input name="current_password" label="Current password" autocomplete="current-password" required />
+            <x-password-input name="password" label="New password" required minlength="8" password-strength />
+            <x-password-input name="password_confirmation" label="Confirm new password" required minlength="8" />
             <div class="bk-form-actions">
                 <button class="bk-btn bk-btn-primary">Change password</button>
             </div>

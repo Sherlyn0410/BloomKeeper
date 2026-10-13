@@ -16,84 +16,21 @@
                 <header class="flex items-center justify-between gap-4 px-1 py-2 sm:px-3">
                     <div>
                         <p class="text-xs font-semibold uppercase tracking-[0.25em] text-[#49665f]">Administrator view</p>
-                        <h1 class="mt-1 font-serif text-3xl font-bold tracking-tight sm:text-4xl">Good morning, {{ Str::of(auth()->user()->name)->before(' ') }}.</h1>
+                        <h1 class="mt-1 font-serif text-3xl font-bold tracking-tight sm:text-4xl">{{ auth()->user()->greeting() }}</h1>
                     </div>
                 </header>
 
-                <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                    @foreach ([
-                        ['label' => 'Total stock items', 'value' => $totalStockItems, 'note' => 'Flower stock on hand', 'tone' => 'text-[#203d37]'],
-                        ['label' => 'Low-stock alerts', 'value' => $lowStockAlerts, 'note' => 'Items below threshold', 'tone' => 'text-[#d47f2a]'],
-                        ['label' => 'Spoilage alerts', 'value' => $spoilageAlerts, 'note' => 'Approaching expiry', 'tone' => 'text-[#d5533d]'],
-                        ['label' => 'Pending orders', 'value' => $pendingOrders, 'note' => 'Awaiting fulfilment', 'tone' => 'text-[#285443]'],
-                        ['label' => 'Pending purchase orders', 'value' => $pendingPurchaseOrders, 'note' => 'Waiting on suppliers', 'tone' => 'text-[#1c9b5f]'],
-                    ] as $stat)
-                        <div class="bk-card">
-                            <p class="text-sm text-[#49665f]">{{ $stat['label'] }}</p>
-                            <p class="mt-3 text-3xl font-bold {{ $stat['tone'] }}">{{ $stat['value'] }}</p>
-                            <p class="mt-2 text-sm text-[#607a72]">{{ $stat['note'] }}</p>
-                        </div>
-                    @endforeach
-                </div>
+                <x-dashboard.stats class="mt-6" :stats="[
+                    ['label' => 'Total stock items', 'value' => $totalStockItems, 'note' => 'Flower stock on hand', 'tone' => 'text-[#203d37]'],
+                    ['label' => 'Low-stock alerts', 'value' => $lowStockAlerts, 'note' => 'Items below threshold', 'tone' => 'text-[#d47f2a]'],
+                    ['label' => 'Spoilage alerts', 'value' => $spoilageAlerts, 'note' => 'Approaching expiry', 'tone' => 'text-[#d5533d]'],
+                    ['label' => 'Pending orders', 'value' => $pendingOrders, 'note' => 'Awaiting fulfilment', 'tone' => 'text-[#285443]'],
+                    ['label' => 'Pending purchase orders', 'value' => $pendingPurchaseOrders, 'note' => 'Waiting on suppliers', 'tone' => 'text-[#1c9b5f]'],
+                ]" />
 
                 <div class="mt-6 grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
-                    <section class="bk-card">
-                        <div class="flex items-center justify-between gap-4">
-                            <div>
-                                <h2 class="bk-card-title">Recent orders</h2>
-                                <p class="mt-1 text-sm text-[#607a72]">Latest customer activity and collection dates.</p>
-                            </div>
-                            <a href="{{ route('admin.orders') }}" class="text-sm font-semibold text-[#285443] underline underline-offset-4">View all</a>
-                        </div>
-                        <div class="mt-6 overflow-hidden">
-                            <table class="w-full table-fixed text-left text-sm">
-                                <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
-                                    <tr><th class="w-3/10 pb-3 font-medium">Customer</th><th class="w-4/10 pb-3 font-medium">Items</th><th class="pb-3 font-medium">Date</th><th class="pb-3 font-medium">Status</th></tr>
-                                </thead>
-                                <tbody class="divide-y divide-[#dce9e6]">
-                                    @foreach ($recentOrders as $order)
-                                        <tr>
-                                            <td class="py-4 font-semibold">{{ $order->customer_name }}<span class="block text-xs font-normal text-[#607a72]">{{ $order->customer_email }}</span></td>
-                                            <td class="py-4 text-[#607a72]">{{ $order->items->map(fn ($item) => $item->quantity.' '.$item->flower_type)->join(', ') }}</td>
-                                            <td class="py-4 text-[#607a72]">{{ $order->collection_date ? $order->collection_date->format('d M Y') : '-' }}</td>
-                                            <td class="py-4"><span class="rounded-full px-3 py-1 text-xs font-semibold {{ $order->status === 'pending' ? 'bg-[#fff0d5] text-[#a76513]' : ($order->status === 'ready' ? 'bg-[#d7f0df] text-[#187849]' : ($order->status === 'completed' ? 'bg-[#d5e4e1] text-[#285443]' : 'bg-[#f5dcd7] text-[#b84331]')) }}">{{ ucfirst($order->status) }}</span></td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                    <aside class="bk-card">
-                        <h2 class="bk-card-title">Quick alerts</h2>
-                        <div class="mt-5 space-y-3">
-                            @forelse ($recentInventoryAlerts as $alert)
-                                @php
-                                    $isLowStock = $alert->quantity <= $alert->low_stock_threshold;
-                                    $cardBg = $isLowStock ? 'bg-[#fff8ec]' : 'bg-[#fbeae7]';
-                                    $badgeBg = $isLowStock ? 'bg-[#fff0d5]' : 'bg-[#f5dcd7]';
-                                    $textColor = $isLowStock ? 'text-[#a76513]' : 'text-[#b84331]';
-                                @endphp
-                                <div class="rounded-2xl {{ $cardBg }} p-3">
-                                    <div class="flex items-start justify-between gap-2">
-                                        <p class="font-semibold text-[#1c2e28]">{{ $alert->flower_type }}</p>
-                                        <span class="shrink-0 rounded-full {{ $badgeBg }} px-2.5 py-1 text-xs font-semibold {{ $textColor }}">
-                                            {{ $isLowStock ? 'Low stock' : 'Spoilage' }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-1 text-sm {{ $textColor }}">
-                                        @if ($isLowStock)
-                                            {{ $alert->quantity }} remaining
-                                        @else
-                                            Check by {{ $alert->date_received->copy()->addDays($alert->shelf_life_days)->format('d M Y') }}
-                                        @endif
-                                    </p>
-                                </div>
-                            @empty
-                                <p class="text-sm text-[#607a72]">No active alerts right now.</p>
-                            @endforelse
-                        </div>
-                    </aside>
+                    <x-dashboard.recent-orders :orders="$recentOrders" :view-all-url="route('admin.orders')" />
+                    <x-dashboard.quick-alerts :alerts="$recentInventoryAlerts" />
                 </div>
 
                 <section class="bk-card mt-6">

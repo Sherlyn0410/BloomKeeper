@@ -13,14 +13,8 @@ class AdminDashboardController extends Controller
     public function __invoke(): View
     {
         $inventoryItems = InventoryItem::query()->get();
-        $lowStockAlerts = $inventoryItems->filter(fn (InventoryItem $item) => $item->quantity <= $item->low_stock_threshold)->count();
-        $spoilageAlerts = $inventoryItems->filter(function (InventoryItem $item): bool {
-            if (! $item->date_received) {
-                return false;
-            }
-
-            return $item->date_received->copy()->addDays($item->shelf_life_days)->lte(now()->addDays(2));
-        })->count();
+        $lowStockAlerts = $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock())->count();
+        $spoilageAlerts = $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isNearSpoilage())->count();
 
         $recentOrders = CustomerOrder::query()->with('items')->latest()->limit(5)->get();
 
@@ -31,7 +25,7 @@ class AdminDashboardController extends Controller
             'pendingOrders' => CustomerOrder::query()->where('status', 'pending')->count(),
             'pendingPurchaseOrders' => PurchaseOrder::query()->where('status', 'sent')->count(),
             'recentOrders' => $recentOrders,
-            'recentInventoryAlerts' => $inventoryItems->filter(fn (InventoryItem $item) => $item->quantity <= $item->low_stock_threshold || $item->date_received->copy()->addDays($item->shelf_life_days)->lte(now()->addDays(2)))->take(6)->values(),
+            'recentInventoryAlerts' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock() || $item->isNearSpoilage())->take(6)->values(),
             'totalUsers' => User::query()->count(),
             'pendingUsers' => User::query()->where('approval_status', 'pending')->count(),
             'activeUsers' => User::query()->where('approval_status', 'approved')->count(),
