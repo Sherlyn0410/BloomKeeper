@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
+use App\Models\PurchaseOrder;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -30,9 +32,30 @@ class StaffDashboardController extends Controller
         }
 
         return response()
-            ->view('dashboard', $user->can('manage-customers') ? $this->workspaceSummary() : [])
+            ->view('dashboard', match (true) {
+                $user->can('manage-customers') => $this->workspaceSummary(),
+                $user->can('supply-orders') => $this->supplierSummary($user),
+                default => [],
+            })
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache');
+    }
+
+    /**
+     * The supplier's open purchase orders and recent deliveries.
+     *
+     * @return array<string, mixed>
+     */
+    private function supplierSummary(User $supplier): array
+    {
+        $orders = PurchaseOrder::query()->where('supplier_id', $supplier->id);
+
+        return [
+            'openPurchaseOrders' => (clone $orders)->where('status', 'sent')->count(),
+            'duePurchaseOrders' => (clone $orders)->where('status', 'sent')->whereDate('requested_date', '<=', today()->addDays(3))->count(),
+            'fulfilledThisMonth' => (clone $orders)->where('status', 'fulfilled')->where('fulfilled_at', '>=', now()->startOfMonth())->count(),
+            'upcomingPurchaseOrders' => (clone $orders)->with('items')->where('status', 'sent')->orderBy('requested_date')->limit(5)->get(),
+        ];
     }
 
     /**

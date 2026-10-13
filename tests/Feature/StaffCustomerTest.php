@@ -95,7 +95,7 @@ test('staff can add a new customer while creating an order', function () {
         ->post(route('staff.orders.store'), [
             'customer_id' => 'new',
             'new_customer' => ['name' => 'Wong Mei Ling', 'phone' => '019-456 7788', 'email' => ''],
-            'collection_date' => today()->format('Y-m-d'),
+            'collection_date' => today()->addDay()->format('Y-m-d'),
             'payment_status' => 'paid',
             'items' => [['flower_type' => 'Roses', 'quantity' => 3]],
         ])

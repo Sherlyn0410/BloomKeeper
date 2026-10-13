@@ -69,7 +69,7 @@
             <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label class="{{ $labelClass }}">
                     Collection date
-                    <input name="collection_date" value="{{ old('collection_date', $order?->collection_date?->format('Y-m-d')) }}" type="date" @unless ($isEditing) min="{{ today()->format('Y-m-d') }}" @endunless required class="{{ $inputClass }}">
+                    <input name="collection_date" value="{{ old('collection_date', $order?->collection_date?->format('Y-m-d')) }}" type="date" min="{{ ($order?->collection_date?->lte(today()) ? $order->collection_date : today()->addDay())->format('Y-m-d') }}" required class="{{ $inputClass }}">
                 </label>
                 <label class="{{ $labelClass }}">
                     <span>Collection time <span class="font-normal text-[#8aa39c]">(optional)</span></span>

@@ -2,6 +2,7 @@
 
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
+use App\Models\PurchaseOrder;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -49,12 +50,24 @@ test('staff pages use the sidebar layout', function () {
         ->assertSee('Record wastage');
 });
 
-test('suppliers see a simple dashboard without staff tools', function () {
-    $this->actingAs(User::factory()->create(['role' => 'supplier']))
+test('suppliers see their purchase order summary and no staff tools', function () {
+    $this->travelTo(Carbon::parse('2026-10-13 02:00:00', 'UTC'));
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $otherSupplier = User::factory()->create(['role' => 'supplier']);
+    $dueSoon = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => '2026-10-14', 'status' => 'sent']);
+    $dueSoon->items()->create(['flower_type' => 'Roses', 'quantity' => 40]);
+    PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => '2026-10-30', 'status' => 'sent']);
+    PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => '2026-10-05', 'status' => 'fulfilled', 'fulfilled_at' => '2026-10-05 03:00:00']);
+    PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $otherSupplier->id, 'supplier_name' => $otherSupplier->name, 'requested_date' => '2026-10-14', 'status' => 'sent']);
+
+    $this->actingAs($supplier)
         ->get(route('dashboard'))
         ->assertOk()
         ->assertSee('Supplier workspace')
-        ->assertSee('Your account is ready')
+        ->assertSeeInOrder(['Awaiting you', '2', 'Due within 3 days', '1', 'Fulfilled this month', '1'])
+        ->assertSee('40 × Roses')
+        ->assertSee(route('supplier.purchase-orders.index'))
         ->assertDontSee('Collections today')
         ->assertDontSee(route('staff.orders.index'));
 });

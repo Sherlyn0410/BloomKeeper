@@ -31,9 +31,10 @@ test('an administrator can update orders, purchasing, and export reports', funct
     OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Tulips', 'quantity' => 12, 'unit_price' => 1.25]);
 
     $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'completed'])->assertRedirect();
+    $supplier = User::factory()->create(['role' => 'supplier', 'name' => 'Greenhouse Co']);
     $this->actingAs($admin)->post(route('admin.purchase-orders.store'), [
-        'supplier_name' => 'Greenhouse Co', 'requested_date' => '2026-09-25', 'flower_type' => 'Tulips', 'quantity' => 30,
-    ])->assertRedirect();
+        'supplier_id' => $supplier->id, 'requested_date' => today()->addDays(3)->format('Y-m-d'), 'flower_type' => 'Tulips', 'quantity' => 30,
+    ])->assertRedirect()->assertSessionHasNoErrors();
 
     $this->actingAs($admin)->get(route('admin.reports.export'))->assertDownload('bloomkeeper-report.xlsx');
     expect($order->refresh()->status)->toBe('completed');
@@ -210,23 +211,25 @@ test('inventory suppliers must be supplier accounts', function () {
     ])->assertSessionHasErrors('supplier_id');
 });
 
-test('marking a purchase order fulfilled records when it happened', function () {
+test('the supplier marking a purchase order fulfilled records when it happened and locks it', function () {
     $this->travelTo(Carbon::parse('2026-10-12 09:00:00'));
     $admin = User::factory()->create(['role' => 'admin']);
 
+    $supplier = User::factory()->create(['role' => 'supplier']);
     $this->actingAs($admin)->post(route('admin.purchase-orders.store'), [
-        'supplier_name' => 'Greenhouse Co', 'requested_date' => '2026-10-15', 'flower_type' => 'Tulips', 'quantity' => 30, 'notes' => 'Deliver before 9am.',
+        'supplier_id' => $supplier->id, 'requested_date' => today()->addDays(3)->format('Y-m-d'), 'flower_type' => 'Tulips', 'quantity' => 30, 'notes' => 'Deliver before 9am.',
     ])->assertSessionHasNoErrors();
 
     $purchaseOrder = PurchaseOrder::sole();
     expect($purchaseOrder->notes)->toBe('Deliver before 9am.')
         ->and($purchaseOrder->fulfilled_at)->toBeNull();
 
-    $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'fulfilled']);
+    $this->actingAs($supplier)->patch(route('supplier.purchase-orders.fulfill', $purchaseOrder))->assertSessionHasNoErrors();
     expect($purchaseOrder->refresh()->fulfilled_at->toDateTimeString())->toBe('2026-10-12 09:00:00');
 
-    $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'cancelled']);
-    expect($purchaseOrder->refresh()->fulfilled_at)->toBeNull();
+    $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'cancelled'])->assertForbidden();
+    expect($purchaseOrder->refresh()->status)->toBe('fulfilled')
+        ->and($purchaseOrder->fulfilled_at)->not->toBeNull();
 });
 
 test('sales use the price saved on each order, not the current inventory price', function () {
@@ -286,6 +289,94 @@ test('placing an order saves the current cost price on each line', function () {
     ])->assertSessionHasNoErrors();
 
     expect(OrderItem::sole()->unit_cost)->toBe('1.20');
+});
+
+test('choosing an approved supplier fills in the supplier name automatically', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier', 'name' => 'Highland Florals']);
+
+    $this->actingAs($admin)->post(route('admin.purchase-orders.store'), [
+        'supplier_id' => $supplier->id, 'requested_date' => today()->addDays(3)->format('Y-m-d'), 'flower_type' => 'Roses', 'quantity' => 40,
+    ])->assertSessionHasNoErrors();
+
+    expect(PurchaseOrder::sole())
+        ->supplier_id->toBe($supplier->id)
+        ->supplier_name->toBe('Highland Florals');
+});
+
+test('a purchase order must be sent to a supplier account', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->post(route('admin.purchase-orders.store'), [
+        'supplier_name' => 'Someone by phone', 'requested_date' => today()->addDays(3)->format('Y-m-d'), 'flower_type' => 'Roses', 'quantity' => 40,
+    ])->assertSessionHasErrors(['supplier_id' => 'Choose the supplier to send this purchase order to.']);
+
+    expect(PurchaseOrder::count())->toBe(0);
+});
+
+test('re-sending a declined purchase order clears the supplier\'s reason', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => '2026-10-15', 'status' => 'declined', 'supplier_note' => 'Out of season']);
+
+    $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'sent']);
+
+    expect($purchaseOrder->refresh())
+        ->status->toBe('sent')
+        ->supplier_note->toBeNull();
+});
+
+test('only approved supplier accounts can be chosen as the supplier', function (array $attributes) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $notASupplier = User::factory()->create($attributes);
+
+    $this->actingAs($admin)->post(route('admin.purchase-orders.store'), [
+        'supplier_id' => $notASupplier->id, 'requested_date' => today()->addDays(3)->format('Y-m-d'), 'flower_type' => 'Roses', 'quantity' => 40,
+    ])->assertSessionHasErrors('supplier_id');
+})->with([
+    'staff account' => [['role' => 'staff']],
+    'unapproved supplier' => [['role' => 'supplier', 'approval_status' => 'pending']],
+]);
+
+test('fulfilled purchase orders are locked and cannot go back to sent or cancelled', function (string $status) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => '2026-10-15', 'status' => 'fulfilled', 'fulfilled_at' => now()]);
+
+    $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => $status])->assertForbidden();
+    $this->actingAs($admin)->get(route('admin.purchase-orders'))
+        ->assertSee('Locked')
+        ->assertDontSee(route('admin.purchase-orders.status', $purchaseOrder));
+
+    expect($purchaseOrder->refresh()->status)->toBe('fulfilled');
+})->with(['sent', 'cancelled']);
+
+test('admins cannot mark a purchase order fulfilled on the supplier\'s behalf', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => '2026-10-15', 'status' => 'sent']);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => 'fulfilled'])
+        ->assertSessionHasErrors(['status' => 'Only the supplier can mark a purchase order as fulfilled.']);
+    $this->actingAs($admin)->get(route('admin.purchase-orders'))->assertDontSee('<option value="fulfilled"', false);
+
+    expect($purchaseOrder->refresh())
+        ->status->toBe('sent')
+        ->fulfilled_at->toBeNull();
+});
+
+test('purchase orders cannot be requested for a past date', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+
+    $this->actingAs($admin)->post(route('admin.purchase-orders.store'), [
+        'supplier_id' => $supplier->id, 'requested_date' => today()->subDay()->format('Y-m-d'), 'flower_type' => 'Roses', 'quantity' => 40,
+    ])->assertSessionHasErrors(['requested_date' => 'The requested date must be today or later.']);
+
+    $this->actingAs($admin)->get(route('admin.purchase-orders'))->assertSee('min="'.today()->format('Y-m-d').'"', false);
+
+    expect(PurchaseOrder::count())->toBe(0);
 });
 
 test('non administrators cannot access operations', function () {

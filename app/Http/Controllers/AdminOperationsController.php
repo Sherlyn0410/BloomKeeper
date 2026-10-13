@@ -141,10 +141,16 @@ class AdminOperationsController extends Controller
     public function storePurchaseOrder(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'supplier_id' => ['nullable', 'exists:users,id'], 'supplier_name' => ['required', 'string', 'max:255'],
-            'requested_date' => ['required', 'date'], 'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:1'],
+            'supplier_id' => ['required', Rule::exists('users', 'id')->where('role', 'supplier')->where('approval_status', 'approved')],
+            'requested_date' => ['required', 'date', 'after_or_equal:today'], 'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'supplier_id.required' => 'Choose the supplier to send this purchase order to.',
+            'requested_date.after_or_equal' => 'The requested date must be today or later.',
         ]);
+
+        $data['supplier_name'] = User::query()->findOrFail($data['supplier_id'])->name;
+
         DB::transaction(function () use ($data): void {
             $purchaseOrder = PurchaseOrder::create([...$data, 'created_by' => auth()->id(), 'status' => 'sent']);
             $purchaseOrder->items()->create(['flower_type' => $data['flower_type'], 'quantity' => $data['quantity']]);
@@ -155,10 +161,14 @@ class AdminOperationsController extends Controller
 
     public function updatePurchaseOrderStatus(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
     {
-        $data = $request->validate(['status' => ['required', 'in:sent,fulfilled,cancelled']]);
+        $data = $request->validate(
+            ['status' => ['required', 'in:sent,cancelled']],
+            ['status.in' => 'Only the supplier can mark a purchase order as fulfilled.'],
+        );
+
         $purchaseOrder->update([
             ...$data,
-            'fulfilled_at' => $data['status'] === 'fulfilled' ? ($purchaseOrder->fulfilled_at ?? now()) : null,
+            'supplier_note' => $data['status'] === 'sent' ? null : $purchaseOrder->supplier_note,
         ]);
 
         return back()->with('status', 'Purchase order status updated.');

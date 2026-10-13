@@ -170,3 +170,40 @@ test('suppliers cannot edit or delete orders', function () {
 
     expect(CustomerOrder::find($order->id))->not->toBeNull();
 });
+
+test('new orders need a collection date after today', function (string $date, bool $allowed) {
+    $response = $this->actingAs($this->staff)->post(route('staff.orders.store'), [
+        'customer_id' => $this->customer->id,
+        'collection_date' => $date,
+        'payment_status' => 'unpaid',
+        'items' => [['flower_type' => 'Roses', 'quantity' => 1]],
+    ]);
+
+    $allowed
+        ? $response->assertSessionHasNoErrors()
+        : $response->assertSessionHasErrors(['collection_date' => 'The collection date must be after today.']);
+})->with([
+    'yesterday' => ['2026-10-11', false],
+    'today' => ['2026-10-12', false],
+    'tomorrow' => ['2026-10-13', true],
+]);
+
+test('editing an overdue order can keep its date but cannot move it to another past date', function () {
+    $order = makeOrder(['collection_date' => '2026-10-10']);
+    $payload = fn (string $date): array => [
+        'customer_id' => $this->customer->id,
+        'collection_date' => $date,
+        'payment_status' => 'paid',
+        'status' => 'pending',
+        'items' => [['flower_type' => 'Roses', 'quantity' => 6]],
+    ];
+
+    $this->actingAs($this->staff)->get(route('staff.orders.edit', $order))->assertSee('min="2026-10-10"', false);
+
+    $this->actingAs($this->staff)->put(route('staff.orders.update', $order), $payload('2026-10-10'))->assertSessionHasNoErrors();
+    expect($order->refresh()->payment_status)->toBe('paid');
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.orders.update', $order), $payload('2026-10-09'))
+        ->assertSessionHasErrors(['collection_date' => 'The collection date must be after today.']);
+});

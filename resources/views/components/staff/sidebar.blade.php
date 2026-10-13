@@ -5,6 +5,10 @@
         ['label' => 'Dashboard', 'route' => 'dashboard', 'active' => request()->routeIs('dashboard')],
     ];
 
+    if (auth()->user()->can('supply-orders')) {
+        $navigation[] = ['label' => 'Purchase orders', 'route' => 'supplier.purchase-orders.index', 'active' => request()->routeIs('supplier.purchase-orders.*')];
+    }
+
     if (auth()->user()->can('manage-customers')) {
         $navigation = [
             ...$navigation,

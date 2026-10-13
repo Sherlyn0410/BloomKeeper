@@ -8,6 +8,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StaffCustomerController;
 use App\Http\Controllers\StaffDashboardController;
 use App\Http\Controllers\StaffOrderController;
+use App\Http\Controllers\SupplierPurchaseOrderController;
 use App\Http\Controllers\WastageController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
@@ -67,6 +68,14 @@ Route::middleware('auth')->group(function (): void {
         });
     });
 
+    Route::middleware(['verified', 'can:supply-orders'])->prefix('supplier')->name('supplier.')->group(function (): void {
+        Route::get('/purchase-orders', [SupplierPurchaseOrderController::class, 'index'])->name('purchase-orders.index');
+        Route::middleware('can:respond-purchase-order,purchaseOrder')->group(function (): void {
+            Route::patch('/purchase-orders/{purchaseOrder}/fulfill', [SupplierPurchaseOrderController::class, 'fulfill'])->name('purchase-orders.fulfill');
+            Route::patch('/purchase-orders/{purchaseOrder}/decline', [SupplierPurchaseOrderController::class, 'decline'])->name('purchase-orders.decline');
+        });
+    });
+
     Route::middleware(['verified', 'can:use-workspace'])->group(function (): void {
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -93,7 +102,7 @@ Route::middleware('auth')->group(function (): void {
         Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
         Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->middleware('can:update-order,customerOrder')->name('orders.status');
         Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
-        Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->name('purchase-orders.status');
+        Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->middleware('can:update-purchase-order,purchaseOrder')->name('purchase-orders.status');
         Route::get('/reports/export', [AdminOperationsController::class, 'exportReport'])->name('reports.export');
         Route::get('/reports/wastage', [AdminOperationsController::class, 'wastageReports'])->name('reports.wastage');
         Route::get('/reports/wastage/export', [AdminOperationsController::class, 'exportWastageReport'])->name('reports.wastage.export');

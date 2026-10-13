@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
+use Closure;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -62,7 +64,7 @@ class StaffOrderController extends Controller
 
     public function update(Request $request, CustomerOrder $customerOrder): RedirectResponse
     {
-        $data = $this->validateOrder($request, withStatus: true);
+        $data = $this->validateOrder($request, $customerOrder);
 
         DB::transaction(function () use ($data, $request, $customerOrder): void {
             $customer = $this->resolveCustomer($data, $request);
@@ -108,8 +110,10 @@ class StaffOrderController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function validateOrder(Request $request, bool $withStatus = false): array
+    private function validateOrder(Request $request, ?CustomerOrder $order = null): array
     {
+        $withStatus = $order !== null;
+
         $isNewCustomer = $request->input('customer_id') === 'new';
 
         return $request->validate([
@@ -117,7 +121,14 @@ class StaffOrderController extends Controller
             'new_customer.name' => [Rule::requiredIf($isNewCustomer), 'nullable', 'string', 'max:255'],
             'new_customer.phone' => [Rule::requiredIf($isNewCustomer), 'nullable', 'string', 'max:30', 'regex:/^(?:[\s-]*\d){9,11}[\s-]*$/'],
             'new_customer.email' => ['nullable', 'email', 'max:255', Rule::unique('customers', 'email')],
-            'collection_date' => ['required', 'date', Rule::when(! $withStatus, 'after_or_equal:today')],
+            'collection_date' => ['required', 'date', function (string $attribute, mixed $value, Closure $fail) use ($order): void {
+                $date = Carbon::parse($value)->startOfDay();
+                $isUnchangedDate = $order !== null && $date->equalTo($order->collection_date);
+
+                if ($date->lte(today()) && ! $isUnchangedDate) {
+                    $fail('The collection date must be after today.');
+                }
+            }],
             'collection_time' => ['nullable', 'date_format:H:i'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'payment_status' => ['required', Rule::in(CustomerOrder::PAYMENT_STATUSES)],
