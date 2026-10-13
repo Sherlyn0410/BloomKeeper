@@ -20,6 +20,15 @@ class InventoryItem extends Model
         return $this->hasMany(StockAdjustment::class);
     }
 
+    /**
+     * Wastage, order reservations, and stock movements all point at the batch through its adjustments,
+     * and deleting the batch would erase them. Batches with history should be zeroed out instead.
+     */
+    public function canBeDeleted(): bool
+    {
+        return ! ($this->adjustments_exists ?? $this->adjustments()->exists());
+    }
+
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'supplier_id');

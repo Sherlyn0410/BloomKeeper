@@ -19,6 +19,22 @@ use Illuminate\View\View;
 
 Route::redirect('/', '/login');
 
+/**
+ * Stock, purchasing, and order-status pages shared by admins and staff. They are registered under both
+ * the admin and staff areas so each role keeps its own URLs, route names, and layout.
+ */
+$sharedOperationsRoutes = function (): void {
+    Route::get('/inventory', [AdminOperationsController::class, 'inventory'])->name('inventory');
+    Route::get('/purchase-orders', [AdminOperationsController::class, 'purchaseOrders'])->name('purchase-orders');
+    Route::post('/inventory', [AdminOperationsController::class, 'storeInventory'])->name('inventory.store');
+    Route::put('/inventory/{inventoryItem}', [AdminOperationsController::class, 'updateInventory'])->name('inventory.update');
+    Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
+    Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->middleware('can:update-order,customerOrder')->name('orders.status');
+    Route::patch('/orders/{customerOrder}/paid', [AdminOperationsController::class, 'markOrderPaid'])->middleware('can:mark-order-paid,customerOrder')->name('orders.paid');
+    Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
+    Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->middleware('can:update-purchase-order,purchaseOrder')->name('purchase-orders.status');
+};
+
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth')->name('login.store');
@@ -30,7 +46,7 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:auth')->name('password.update');
 });
 
-Route::middleware('auth')->group(function (): void {
+Route::middleware('auth')->group(function () use ($sharedOperationsRoutes): void {
     Route::get('/email/verify', function (): View {
         return view('auth.verify-email');
     })->name('verification.notice');
@@ -50,10 +66,10 @@ Route::middleware('auth')->group(function (): void {
     })->name('dashboard.user');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-    Route::middleware(['verified', 'can:manage-customers'])->prefix('staff')->name('staff.')->group(function (): void {
+    Route::middleware(['verified', 'can:manage-customers'])->prefix('staff')->name('staff.')->group(function () use ($sharedOperationsRoutes): void {
         Route::get('/customers', [StaffCustomerController::class, 'index'])->name('customers.index');
         Route::post('/customers', [StaffCustomerController::class, 'store'])->name('customers.store');
-        Route::get('/orders', [StaffOrderController::class, 'index'])->name('orders.index');
+        Route::get('/orders', [AdminOperationsController::class, 'orders'])->name('orders.index');
         Route::get('/orders/create', [StaffOrderController::class, 'create'])->name('orders.create');
         Route::post('/orders', [StaffOrderController::class, 'store'])->name('orders.store');
         Route::get('/orders/{customerOrder}/edit', [StaffOrderController::class, 'edit'])->middleware('can:update-order,customerOrder')->name('orders.edit');
@@ -66,6 +82,7 @@ Route::middleware('auth')->group(function (): void {
             Route::put('/wastage/{stockAdjustment}', [WastageController::class, 'update'])->name('wastage.update');
             Route::delete('/wastage/{stockAdjustment}', [WastageController::class, 'destroy'])->name('wastage.destroy');
         });
+        $sharedOperationsRoutes();
     });
 
     Route::middleware(['verified', 'can:supply-orders'])->prefix('supplier')->name('supplier.')->group(function (): void {
@@ -82,7 +99,8 @@ Route::middleware('auth')->group(function (): void {
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
     });
 
-    Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function (): void {
+    Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function () use ($sharedOperationsRoutes): void {
+        $sharedOperationsRoutes();
         Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
         Route::get('/users', [AdminUserController::class, 'users'])->name('users');
         Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
@@ -92,19 +110,10 @@ Route::middleware('auth')->group(function (): void {
         Route::patch('/users/{user}/suspend', [AdminUserController::class, 'suspend'])->name('users.suspend');
         Route::patch('/users/{user}/restore', [AdminUserController::class, 'restore'])->name('users.restore');
         Route::get('/operations', [AdminOperationsController::class, 'index'])->name('operations');
-        Route::get('/inventory', [AdminOperationsController::class, 'inventory'])->name('inventory');
         Route::get('/orders', [AdminOperationsController::class, 'orders'])->name('orders');
-        Route::get('/purchase-orders', [AdminOperationsController::class, 'purchaseOrders'])->name('purchase-orders');
         Route::get('/reports', [AdminOperationsController::class, 'reports'])->name('reports');
         Route::get('/wastage', [AdminOperationsController::class, 'wastage'])->name('wastage');
-        Route::post('/inventory', [AdminOperationsController::class, 'storeInventory'])->name('inventory.store');
-        Route::put('/inventory/{inventoryItem}', [AdminOperationsController::class, 'updateInventory'])->name('inventory.update');
-        Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
-        Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->middleware('can:update-order,customerOrder')->name('orders.status');
-        Route::patch('/orders/{customerOrder}/paid', [AdminOperationsController::class, 'markOrderPaid'])->middleware('can:mark-order-paid,customerOrder')->name('orders.paid');
-        Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
         Route::put('/purchase-orders/{purchaseOrder}', [AdminOperationsController::class, 'updatePurchaseOrder'])->middleware('can:edit-purchase-order,purchaseOrder')->name('purchase-orders.update');
-        Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->middleware('can:update-purchase-order,purchaseOrder')->name('purchase-orders.status');
         Route::get('/reports/export', [AdminOperationsController::class, 'exportReport'])->name('reports.export');
         Route::get('/reports/wastage', [AdminOperationsController::class, 'wastageReports'])->name('reports.wastage');
         Route::get('/reports/wastage/export', [AdminOperationsController::class, 'exportWastageReport'])->name('reports.wastage.export');

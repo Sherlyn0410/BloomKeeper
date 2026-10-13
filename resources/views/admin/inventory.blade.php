@@ -1,4 +1,9 @@
-<x-admin.layout
+@php
+    // Admins and staff share this page; links and forms stay inside the viewer's own area.
+    $area = auth()->user()->can('manage-users') ? 'admin' : 'staff';
+@endphp
+
+<x-workspace.layout
     title="Inventory"
     description="Track flower stock, monitor shelf life, and keep quantities ready for upcoming orders."
 >
@@ -7,7 +12,7 @@
             <h2 class="bk-card-title">Add flower stock</h2>
             <p class="mt-1 text-sm text-[#607a72]">Record a new batch with its pricing and alert thresholds.</p>
         </div>
-        <form method="POST" action="{{ route('admin.inventory.store') }}" class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <form method="POST" action="{{ route($area.'.inventory.store') }}" class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             @csrf
             <label class="bk-label">
                 Flower type
@@ -62,7 +67,7 @@
                     <input name="search" value="{{ request('search') }}" placeholder="Search flower" class="bk-input w-56">
                     <button class="bk-btn bk-btn-primary">Search</button>
                     @if (request()->filled('search'))
-                        <a href="{{ route('admin.inventory', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
+                        <a href="{{ route($area.'.inventory', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
                     @endif
                 </form>
             </div>
@@ -137,10 +142,14 @@
                                         onclick="document.getElementById('edit-stock-{{ $item->id }}').showModal()"
                                     >Edit</button>
                                     <a href="{{ route('staff.wastage.create', ['item' => $item->id]) }}" class="text-[#a76513] underline underline-offset-2">Wastage</a>
-                                    <form method="POST" action="{{ route('admin.inventory.destroy', $item) }}" onsubmit="return confirm('Delete {{ $item->flower_type }}? This cannot be undone.')">
-                                        @csrf @method('DELETE')
-                                        <button class="cursor-pointer text-[#b84331] underline underline-offset-2" type="submit">Delete</button>
-                                    </form>
+                                    @if ($item->canBeDeleted())
+                                        <form method="POST" action="{{ route($area.'.inventory.destroy', $item) }}" onsubmit="return confirm(@js("Delete {$item->flower_type}? This cannot be undone."))">
+                                            @csrf @method('DELETE')
+                                            <button class="cursor-pointer text-[#b84331] underline underline-offset-2" type="submit">Delete</button>
+                                        </form>
+                                    @else
+                                        <span class="cursor-not-allowed text-[#a9bcb6]" title="Has stock history (wastage, order stock, or adjustments), so it can't be deleted. Set its quantity to 0 instead.">Delete</span>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -152,7 +161,7 @@
                             class="fixed left-1/2 top-1/2 m-0 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[24px] bg-white p-0 backdrop:bg-[#1c2e28]/40"
                         >
                             <div class="max-h-[calc(100vh-2rem)] overflow-y-auto p-6 sm:p-8">
-                                <form method="POST" action="{{ route('admin.inventory.update', $item) }}" class="text-left">
+                                <form method="POST" action="{{ route($area.'.inventory.update', $item) }}" class="text-left">
                                     @csrf @method('PUT')
                                     <div class="flex items-start justify-between gap-4">
                                         <div>
@@ -214,4 +223,4 @@
             </table>
         </div>
     </section>
-</x-admin.layout>
+</x-workspace.layout>

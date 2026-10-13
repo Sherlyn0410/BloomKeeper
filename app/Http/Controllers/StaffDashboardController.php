@@ -74,7 +74,8 @@ class StaffDashboardController extends Controller
             'pendingOrders' => CustomerOrder::query()->where('status', 'pending')->count(),
             'collectionsToday' => CustomerOrder::query()->whereIn('status', ['pending', 'ready'])->whereDate('collection_date', today())->count(),
             'recentOrders' => CustomerOrder::query()->with('items')->latest()->limit(5)->get(),
-            'inventoryAlerts' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock() || $item->isNearSpoilage())->take(6)->values(),
+            'lowStockItems' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock())->sortBy('quantity')->take(5)->values(),
+            'spoilageItems' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isNearSpoilage())->sortBy(fn (InventoryItem $item): int => $item->spoilageDate()->timestamp)->take(5)->values(),
         ];
     }
 }

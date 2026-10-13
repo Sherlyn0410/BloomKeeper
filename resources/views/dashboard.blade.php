@@ -13,7 +13,10 @@
 
         <div class="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
             <x-dashboard.recent-orders :orders="$recentOrders" :view-all-url="route('staff.orders.index')" />
-            <x-dashboard.quick-alerts :alerts="$inventoryAlerts" />
+            <div class="min-w-0 space-y-6">
+                <x-dashboard.quick-alerts title="Low stock" type="low-stock" :alerts="$lowStockItems" :view-all-url="route('staff.inventory', ['sort' => 'quantity'])" empty-message="Every flower is above its low-stock threshold." />
+                <x-dashboard.quick-alerts title="Spoilage alerts" type="spoilage" :alerts="$spoilageItems" :view-all-url="route('staff.inventory', ['sort' => 'spoilage_date'])" empty-message="Nothing is close to spoiling." />
+            </div>
         </div>
 
         <section class="bk-card">
@@ -21,6 +24,7 @@
             <p class="bk-card-subtitle">Jump straight into today's work.</p>
             <div class="mt-5 flex flex-wrap gap-3">
                 <a href="{{ route('staff.orders.create') }}" class="bk-btn bk-btn-primary"><x-icons.plus /> Create order</a>
+                <a href="{{ route('staff.purchase-orders') }}" class="bk-btn bk-btn-secondary">Purchase orders</a>
                 <a href="{{ route('staff.customers.index') }}" class="bk-btn bk-btn-secondary">Customers</a>
                 <a href="{{ route('staff.wastage.create') }}" class="bk-btn bk-btn-secondary">Record wastage</a>
             </div>

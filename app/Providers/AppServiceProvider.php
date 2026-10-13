@@ -34,8 +34,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('delete-order', fn (User $user, CustomerOrder $order): bool => $order->canBeDeleted());
         Gate::define('mark-order-paid', fn (User $user, CustomerOrder $order): bool => $order->canBeMarkedPaid());
         Gate::define('supply-orders', fn (User $user): bool => $user->role === 'supplier' && $user->approval_status === 'approved');
-        Gate::define('edit-purchase-order', fn (User $user, PurchaseOrder $order): bool => $order->canBeEdited());
-        Gate::define('update-purchase-order', fn (User $user, PurchaseOrder $order): bool => ! $order->isLocked());
+        Gate::define('edit-purchase-order', fn (User $user, PurchaseOrder $order): bool => $user->role === 'admin' && $order->canBeEdited());
+        Gate::define('update-purchase-order', fn (User $user, PurchaseOrder $order): bool => ! $order->isLocked()
+            && ($user->role === 'admin' || $order->created_by === $user->id));
         Gate::define('respond-purchase-order', fn (User $user, PurchaseOrder $order): bool => $order->supplier_id === $user->id && $order->isAwaitingSupplier());
         Gate::define('edit-wastage', fn (User $user, StockAdjustment $adjustment): bool => $adjustment->isWastageEditableBy($user));
         Gate::define('manage-customers', fn (User $user): bool => in_array($user->role, ['admin', 'staff'], true) && $user->approval_status === 'approved');

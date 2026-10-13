@@ -21,7 +21,9 @@ test('staff see the workspace dashboard with stock alerts, collections, and rece
         ->assertSeeInOrder(['Total stock items', '2', 'Low-stock alerts', '1', 'Spoilage alerts', '1', 'Pending orders', '1', 'Collections today', '1'])
         ->assertSee('Aisha Rahman')
         ->assertSee('Daniel Tan')
-        ->assertSee('Quick alerts')
+        ->assertSeeInOrder(['Low stock', 'Tulips', '3 remaining', 'Spoilage alerts', 'Lilies', 'Check by'])
+        ->assertSee(route('staff.inventory', ['sort' => 'quantity']))
+        ->assertSee(route('staff.inventory', ['sort' => 'spoilage_date']))
         ->assertSee(route('staff.orders.index'))
         ->assertSee(route('staff.wastage.create'))
         ->assertDontSee(route('admin.dashboard'));

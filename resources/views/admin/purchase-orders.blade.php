@@ -1,10 +1,12 @@
 @php
+    // Admins and staff share this page; links and forms stay inside the viewer's own area.
+    $area = auth()->user()->can('manage-users') ? 'admin' : 'staff';
     // When an edit fails validation, its old input belongs to that edit dialog, not to the create form.
     $failedEditId = (int) old('editing_purchase_order');
     $createOld = fn (string $key): mixed => $failedEditId ? null : old($key);
 @endphp
 
-<x-admin.layout
+<x-workspace.layout
     title="Purchase Orders"
     description="Create supplier requests and track which flower deliveries are sent, fulfilled, or cancelled."
 >
@@ -14,9 +16,9 @@
             <p class="mt-1 text-sm text-[#607a72]">Send a request to an approved supplier. They see it in their account and mark it fulfilled.</p>
         </div>
         @if ($suppliers->isEmpty())
-            <p class="mt-4 rounded-xl bg-[#fff0d5] px-3 py-2 text-sm text-[#a76513]">No approved suppliers yet. Approve one under <a href="{{ route('admin.users', ['role' => 'supplier']) }}" class="font-semibold underline">Manage Users → Suppliers</a>.</p>
+            <p class="mt-4 rounded-xl bg-[#fff0d5] px-3 py-2 text-sm text-[#a76513]">No approved suppliers yet. @can('manage-users') Approve one under <a href="{{ route('admin.users', ['role' => 'supplier']) }}" class="font-semibold underline">Manage Users → Suppliers</a>. @else Ask an administrator to approve a supplier account. @endcan</p>
         @endif
-        <form method="POST" action="{{ route('admin.purchase-orders.store') }}" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1.5fr]">
+        <form method="POST" action="{{ route($area.'.purchase-orders.store') }}" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1.5fr]">
             @csrf
             <label class="bk-label">
                 Supplier
@@ -73,7 +75,7 @@
                 </label>
                 <button class="bk-btn bk-btn-primary">Filter</button>
                 @if ($isFiltered)
-                    <a href="{{ route('admin.purchase-orders', array_filter(['status' => $activeStatus])) }}" class="bk-btn bk-btn-ghost">Clear</a>
+                    <a href="{{ route($area.'.purchase-orders', array_filter(['status' => $activeStatus])) }}" class="bk-btn bk-btn-ghost">Clear</a>
                 @endif
             </form>
         </div>
@@ -85,7 +87,7 @@
                     $count = $status === '' ? $statusCounts->sum() : ($statusCounts[$status] ?? 0);
                 @endphp
                 <a
-                    href="{{ route('admin.purchase-orders', array_filter([...request()->only(['search', 'date']), 'status' => $status])) }}"
+                    href="{{ route($area.'.purchase-orders', array_filter([...request()->only(['search', 'date']), 'status' => $status])) }}"
                     @if ($isActive) aria-current="page" @endif
                     @class([
                         'flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition',
@@ -132,19 +134,19 @@
                             </p>
                         </div>
                         <div class="flex shrink-0 items-center gap-2">
-                        @if ($purchaseOrder->canBeEdited())
+                        @can('edit-purchase-order', $purchaseOrder)
                             <button type="button" onclick="document.getElementById('edit-po-{{ $purchaseOrder->id }}').showModal()" class="bk-btn bk-btn-secondary bk-btn-sm h-8">
                                 <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.59 3.59a2 2 0 0 1 2.82 2.82l-8.6 8.6a2 2 0 0 1-.9.52l-3.12.89a.5.5 0 0 1-.62-.62l.89-3.12a2 2 0 0 1 .52-.9l8.6-8.6Z" /></svg>
                                 Edit
                             </button>
-                        @endif
+                        @endcan
                         @if ($purchaseOrder->isLocked())
                             <span class="inline-flex h-8 shrink-0 items-center gap-1 text-xs font-semibold text-[#8aa39c]" title="Fulfilled orders have been delivered and can't be changed">
                                 <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" /></svg>
                                 Locked
                             </span>
-                        @else
-                            <form method="POST" action="{{ route('admin.purchase-orders.status', $purchaseOrder) }}" class="shrink-0">
+                        @elseif (auth()->user()->can('update-purchase-order', $purchaseOrder))
+                            <form method="POST" action="{{ route($area.'.purchase-orders.status', $purchaseOrder) }}" class="shrink-0">
                                 @csrf
                                 @method('PATCH')
                                 <label class="sr-only" for="po-status-{{ $purchaseOrder->id }}">Status</label>
@@ -161,14 +163,14 @@
                     </div>
 
                     @if ($purchaseOrder->notes)
-                        <p class="rounded-lg bg-[#fdf6ea] px-3 py-1.5 text-xs text-[#7a5a2b]"><span class="font-semibold">Your note:</span> {{ $purchaseOrder->notes }}</p>
+                        <p class="rounded-lg bg-[#fdf6ea] px-3 py-1.5 text-xs text-[#7a5a2b]"><span class="font-semibold">Note to supplier:</span> {{ $purchaseOrder->notes }}</p>
                     @endif
                     @if ($purchaseOrder->supplier_note)
                         <p @class(['rounded-lg px-3 py-1.5 text-xs', 'bg-[#fbeae7] text-[#b84331]' => $purchaseOrder->status === 'declined', 'bg-[#edf7f5] text-[#285443]' => $purchaseOrder->status !== 'declined'])>
                             <span class="font-semibold">Supplier {{ $purchaseOrder->status === 'declined' ? 'declined' : 'replied' }}:</span> {{ $purchaseOrder->supplier_note }}
                         </p>
                     @endif
-                    @if ($purchaseOrder->canBeEdited())
+                    @can('edit-purchase-order', $purchaseOrder)
                         @php
                             $isFailedEdit = $failedEditId === $purchaseOrder->id;
                             $editValue = fn (string $key, mixed $current): mixed => $isFailedEdit ? old($key) : $current;
@@ -232,7 +234,7 @@
                                 </div>
                             </form>
                         </dialog>
-                    @endif
+                    @endcan
                 </article>
             @empty
                 <p class="bk-tile text-sm text-[#607a72] lg:col-span-2">{{ $isFiltered || $activeStatus !== '' ? 'No purchase orders match the current filters.' : 'No purchase orders have been created yet.' }}</p>
@@ -243,4 +245,4 @@
     <script>
         document.querySelector('dialog[data-open-on-load]')?.showModal();
     </script>
-</x-admin.layout>
+</x-workspace.layout>

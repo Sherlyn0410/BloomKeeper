@@ -7,17 +7,22 @@
     ];
     $activeStatus = request('status', '');
     $today = today();
+    // Admins and staff share this page; filter links stay on the viewer's own orders page.
+    $ordersRoute = auth()->user()->can('manage-users') ? 'admin.orders' : 'staff.orders.index';
 @endphp
 
-<x-admin.layout
+<x-workspace.layout
     title="Customer Orders"
     description="Review customer collections, inspect order items, and move each order through fulfilment."
 >
     <section class="bk-card">
         <div>
-            <div>
-                <h2 class="bk-card-title">Order queue</h2>
-                <p class="mt-1 text-sm text-[#607a72]">Filter the queue by customer, collection date, or status.</p>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 class="bk-card-title">Order queue</h2>
+                    <p class="mt-1 text-sm text-[#607a72]">Filter the queue by customer, collection date, or status.</p>
+                </div>
+                <a href="{{ route('staff.orders.create') }}" class="bk-btn bk-btn-accent"><x-icons.plus /> New order</a>
             </div>
             <form class="mt-4 flex flex-wrap items-center gap-2">
                 <input type="hidden" name="status" value="{{ $activeStatus }}">
@@ -32,7 +37,7 @@
                 </label>
                 <button class="bk-btn bk-btn-primary">Filter</button>
                 @if (request()->filled('customer') || request()->filled('date'))
-                    <a href="{{ route('admin.orders', array_filter(['status' => $activeStatus])) }}" class="bk-btn bk-btn-ghost">Clear</a>
+                    <a href="{{ route($ordersRoute, array_filter(['status' => $activeStatus])) }}" class="bk-btn bk-btn-ghost">Clear</a>
                 @endif
             </form>
         </div>
@@ -44,7 +49,7 @@
                     $count = $status === '' ? $statusCounts->sum() : ($statusCounts[$status] ?? 0);
                 @endphp
                 <a
-                    href="{{ route('admin.orders', array_filter([...request()->only(['customer', 'date']), 'status' => $status])) }}"
+                    href="{{ route($ordersRoute, array_filter([...request()->only(['customer', 'date']), 'status' => $status])) }}"
                     @if ($isActive) aria-current="page" @endif
                     @class([
                         'flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition',
@@ -131,46 +136,7 @@
                         </ul>
                     @endif
 
-                    {{-- Footer: status on the left, actions on the right --}}
-                    <div class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#e3eeeb] pt-3">
-                        @if ($order->status === 'cancelled')
-                            <label class="sr-only" for="order-status-{{ $order->id }}">Status</label>
-                            <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't be changed. They can only be deleted." class="bk-input bk-input-sm h-8 w-32 cursor-not-allowed bg-[#eef3f1] py-1 text-[#8aa39c]">
-                                <option>Cancelled</option>
-                            </select>
-                        @elseif (! $order->isLocked())
-                            <form method="POST" action="{{ route('admin.orders.status', $order) }}">
-                                @csrf
-                                @method('PATCH')
-                                <label class="sr-only" for="order-status-{{ $order->id }}">Update status</label>
-                                <select
-                                    id="order-status-{{ $order->id }}"
-                                    name="status"
-                                    data-current="{{ $order->status }}"
-                                    onchange="if (this.dataset.current === 'ready' && this.value === 'cancelled' && ! confirm(@js("Order {$order->order_number} is already prepared. Cancelling it records its flowers as wastage instead of returning them to stock. Continue?"))) { this.value = this.dataset.current; return; } this.form.submit()"
-                                    class="bk-input bk-input-sm h-8 w-32 cursor-pointer py-1 text-[#285443]"
-                                >
-                                    @foreach (['pending' => 'Pending', 'ready' => 'Ready', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $value => $label)
-                                        <option value="{{ $value }}" @selected($order->status === $value)>{{ $label }}</option>
-                                    @endforeach
-                                </select>
-                            </form>
-                        @endif
-
-                        <div class="ml-auto flex flex-wrap items-center gap-2">
-                            @if ($order->canBeMarkedPaid())
-                                <form method="POST" action="{{ route('admin.orders.paid', $order) }}">
-                                    @csrf
-                                    @method('PATCH')
-                                    <button type="submit" class="bk-btn bk-btn-primary bk-btn-sm h-8">
-                                        <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.58l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd" /></svg>
-                                        Mark as paid
-                                    </button>
-                                </form>
-                            @endif
-                            <x-order-actions :order="$order" />
-                        </div>
-                    </div>
+                    <x-order-controls :order="$order" class="mt-4" />
                 </article>
             @empty
                 <div class="bk-tile text-center">
@@ -180,4 +146,4 @@
             @endforelse
         </div>
     </section>
-</x-admin.layout>
+</x-workspace.layout>

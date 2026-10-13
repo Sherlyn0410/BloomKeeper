@@ -41,7 +41,7 @@ class AdminOperationsController extends Controller
         $direction = $request->query('direction') === 'desc' ? 'desc' : 'asc';
 
         return view('admin.inventory', [
-            'inventory' => InventoryItem::query()->with('supplier')
+            'inventory' => InventoryItem::query()->with('supplier')->withExists('adjustments')
                 ->when($request->filled('search'), fn ($query) => $query->where('flower_type', 'like', '%'.$request->string('search').'%'))
                 ->orderBy('flower_type')->get()
                 ->sortBy($sortableColumns[$sort], SORT_REGULAR, $direction === 'desc')->values(),
@@ -138,6 +138,10 @@ class AdminOperationsController extends Controller
 
     public function deleteInventory(InventoryItem $inventoryItem): RedirectResponse
     {
+        if (! $inventoryItem->canBeDeleted()) {
+            return back()->withErrors(['inventory' => "{$inventoryItem->flower_type} can't be deleted because it has stock history (wastage, order stock, or adjustments). Set its quantity to 0 instead."]);
+        }
+
         $inventoryItem->delete();
 
         return back()->with('status', 'Inventory item deleted.');

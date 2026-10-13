@@ -17,19 +17,6 @@ use Illuminate\View\View;
 
 class StaffOrderController extends Controller
 {
-    public function index(Request $request): View
-    {
-        return view('staff.orders', [
-            'orders' => CustomerOrder::query()->with('items')
-                ->when($request->filled('search'), fn ($query) => $query->where(fn ($query) => $query
-                    ->where('order_number', 'like', '%'.$request->string('search').'%')
-                    ->orWhere('customer_name', 'like', '%'.$request->string('search').'%')))
-                ->latest()
-                ->paginate(15)
-                ->withQueryString(),
-        ]);
-    }
-
     public function create(): View
     {
         return view('staff.orders-form', $this->formData());

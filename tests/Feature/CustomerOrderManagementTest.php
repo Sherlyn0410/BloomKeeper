@@ -194,7 +194,7 @@ test('the staff order list can be searched by order number', function () {
     makeOrder(['customer_name' => 'Leo Tan']);
 
     $this->actingAs($this->staff)
-        ->get(route('staff.orders.index', ['search' => '0001']))
+        ->get(route('staff.orders.index', ['customer' => '0001']))
         ->assertOk()
         ->assertSee('Priya Nair')
         ->assertDontSee('Leo Tan');
