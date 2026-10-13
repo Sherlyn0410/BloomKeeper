@@ -91,6 +91,9 @@
                                 <option value="{{ $status }}" @selected(old('status', $order->status) === $status)>{{ ucfirst($status) }}</option>
                             @endforeach
                         </select>
+                        @if ($order->status === 'ready')
+                            <span class="text-xs font-normal text-[#a76513]">Cancelling a ready order records its flowers as wastage.</span>
+                        @endif
                     </label>
                 @endif
                 <label class="{{ $labelClass }} sm:col-span-2 lg:col-span-4">

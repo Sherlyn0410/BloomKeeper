@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\CustomerOrder;
 use App\Models\StockAdjustment;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -28,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::define('manage-users', fn (User $user): bool => $user->role === 'admin');
         Gate::define('use-workspace', fn (User $user): bool => $user->approval_status === 'approved');
+        Gate::define('update-order', fn (User $user, CustomerOrder $order): bool => ! $order->isLocked());
+        Gate::define('delete-order', fn (User $user, CustomerOrder $order): bool => $order->canBeDeleted());
         Gate::define('edit-wastage', fn (User $user, StockAdjustment $adjustment): bool => $adjustment->isWastageEditableBy($user));
         Gate::define('manage-customers', fn (User $user): bool => in_array($user->role, ['admin', 'staff'], true) && $user->approval_status === 'approved');
 

@@ -107,7 +107,9 @@ test('cancelling returns the stock and reopening takes it again', function () {
     expect($this->roses->refresh()->quantity)->toBe(10)
         ->and($order->heldStock()->all())->toBe([]);
 
-    $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'pending']);
+    $this->actingAs($admin)
+        ->put(route('staff.orders.update', $order), orderPayload([['flower_type' => 'Roses', 'quantity' => 4]], ['status' => 'pending']))
+        ->assertSessionHasNoErrors();
     expect($this->roses->refresh()->quantity)->toBe(6);
 });
 
@@ -118,25 +120,96 @@ test('a cancelled order cannot be reopened when its flowers have sold out', func
     placeOrder([['flower_type' => 'Roses', 'quantity' => 8]]);
 
     $this->actingAs($admin)
-        ->patch(route('admin.orders.status', $order), ['status' => 'pending'])
+        ->put(route('staff.orders.update', $order), orderPayload([['flower_type' => 'Roses', 'quantity' => 4]], ['status' => 'pending']))
         ->assertSessionHasErrors('items');
 
     expect($order->refresh()->status)->toBe('cancelled')
         ->and($this->roses->refresh()->quantity)->toBe(2);
 });
 
-test('deleting a pending order and cancelling a ready order both return stock', function () {
+test('deleting a pending order returns its stock', function () {
     $pending = placeOrder([['flower_type' => 'Roses', 'quantity' => 3]]);
-    $ready = placeOrder([['flower_type' => 'Lilies', 'quantity' => 2]]);
-    $ready->update(['status' => 'ready']);
 
     $this->actingAs($this->staff)->delete(route('staff.orders.destroy', $pending));
-    $this->actingAs($this->staff)->delete(route('staff.orders.destroy', $ready));
 
     expect(CustomerOrder::find($pending->id))->toBeNull()
-        ->and($ready->refresh()->status)->toBe('cancelled')
-        ->and($this->roses->refresh()->quantity)->toBe(10)
-        ->and($this->lilies->refresh()->quantity)->toBe(5);
+        ->and($this->roses->refresh()->quantity)->toBe(10);
+});
+
+test('cancelling a ready order records its flowers as wastage instead of returning them', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = placeOrder([['flower_type' => 'Lilies', 'quantity' => 2], ['flower_type' => 'Roses', 'quantity' => 3]]);
+    $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'ready']);
+
+    $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'cancelled'])->assertSessionHasNoErrors();
+
+    $wastage = StockAdjustment::where('type', 'wastage')->get();
+    expect($order->refresh()->status)->toBe('cancelled')
+        ->and($this->lilies->refresh()->quantity)->toBe(3)
+        ->and($this->roses->refresh()->quantity)->toBe(7)
+        ->and($order->heldStock()->all())->toBe([])
+        ->and($wastage)->toHaveCount(2)
+        ->and($wastage->sum('quantity_change'))->toEqual(-5)
+        ->and($wastage->pluck('reason')->unique()->all())->toBe(['other'])
+        ->and($wastage->first()->notes)->toContain($order->order_number);
+
+    $this->actingAs($admin)->get(route('admin.reports.wastage'))->assertSee('RM 7.00');
+});
+
+test('cancelling a ready order through the edit form also records wastage', function () {
+    $order = placeOrder([['flower_type' => 'Roses', 'quantity' => 4]]);
+    $order->update(['status' => 'ready']);
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.orders.update', $order), orderPayload([['flower_type' => 'Roses', 'quantity' => 4]], ['status' => 'cancelled']))
+        ->assertSessionHasNoErrors();
+
+    expect($this->roses->refresh()->quantity)->toBe(6)
+        ->and(StockAdjustment::where('type', 'wastage')->sum('quantity_change'))->toEqual(-4);
+});
+
+test('cancelling a ready order placed before stock tracking takes its flowers from stock as wastage', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $legacyOrder = CustomerOrder::create(['created_by' => $admin->id, 'customer_name' => 'Old Order', 'collection_date' => today(), 'status' => 'ready']);
+    $legacyOrder->items()->create(['flower_type' => 'Roses', 'quantity' => 4, 'unit_price' => 2.50]);
+    $legacyOrder->items()->create(['flower_type' => 'Lilies', 'quantity' => 7, 'unit_price' => 3.25]);
+
+    $this->actingAs($admin)->patch(route('admin.orders.status', $legacyOrder), ['status' => 'cancelled'])->assertSessionHasNoErrors();
+
+    $wastage = StockAdjustment::with('inventoryItem')->where('type', 'wastage')->get()->keyBy(fn ($adjustment) => $adjustment->inventoryItem->flower_type);
+    expect($this->roses->refresh()->quantity)->toBe(6)
+        ->and($this->lilies->refresh()->quantity)->toBe(0)
+        ->and($wastage['Roses']->quantity_change)->toBe(-4)
+        ->and($wastage['Roses']->notes)->toBe("Order {$legacyOrder->order_number} was cancelled after it was prepared.")
+        ->and($wastage['Lilies']->quantity_change)->toBe(-5)
+        ->and($wastage['Lilies']->notes)->toContain('2 more Lilies were used but not in stock records.');
+});
+
+test('cancelling a pending order still returns its stock', function () {
+    $order = placeOrder([['flower_type' => 'Roses', 'quantity' => 4]]);
+
+    $this->actingAs(User::factory()->create(['role' => 'admin']))
+        ->patch(route('admin.orders.status', $order), ['status' => 'cancelled']);
+
+    expect($this->roses->refresh()->quantity)->toBe(10)
+        ->and(StockAdjustment::where('type', 'wastage')->count())->toBe(0);
+});
+
+test('the status dropdown is disabled for cancelled orders and the server refuses changes', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = placeOrder([['flower_type' => 'Roses', 'quantity' => 4]]);
+    $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'cancelled']);
+
+    $this->actingAs($admin)->get(route('admin.orders'))
+        ->assertSee('id="order-status-'.$order->id.'" disabled', false)
+        ->assertDontSee('action="'.route('admin.orders.status', $order).'"', false);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.orders.status', $order), ['status' => 'pending'])
+        ->assertSessionHasErrors('status');
+
+    expect($order->refresh()->status)->toBe('cancelled')
+        ->and($this->roses->refresh()->quantity)->toBe(10);
 });
 
 test('orders placed before stock tracking can still change status without touching stock', function () {

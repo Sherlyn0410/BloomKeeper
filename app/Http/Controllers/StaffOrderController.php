@@ -66,6 +66,7 @@ class StaffOrderController extends Controller
 
         DB::transaction(function () use ($data, $request, $customerOrder): void {
             $customer = $this->resolveCustomer($data, $request);
+            $previousStatus = $customerOrder->status;
 
             $customerOrder->update([
                 ...$this->orderAttributes($data, $customer),
@@ -73,7 +74,10 @@ class StaffOrderController extends Controller
             ]);
 
             $this->saveItems($customerOrder, $data['items']);
-            $customerOrder->syncStock($request->user());
+
+            $customerOrder->status === 'cancelled'
+                ? $customerOrder->applyStatusChangeToStock($request->user(), $previousStatus)
+                : $customerOrder->syncStock($request->user());
         });
 
         return $this->redirectToOrderList($request)->with('status', "Order {$customerOrder->order_number} has been updated.");
@@ -81,16 +85,6 @@ class StaffOrderController extends Controller
 
     public function destroy(Request $request, CustomerOrder $customerOrder): RedirectResponse
     {
-        if ($customerOrder->mustBeCancelledInsteadOfDeleted()) {
-            $previousStatus = $customerOrder->status;
-            DB::transaction(function () use ($customerOrder, $request, $previousStatus): void {
-                $customerOrder->update(['status' => 'cancelled']);
-                $customerOrder->applyStatusChangeToStock($request->user(), $previousStatus);
-            });
-
-            return $this->redirectToOrderList($request)->with('status', "Order {$customerOrder->order_number} was {$previousStatus}, so it has been cancelled instead of deleted.");
-        }
-
         DB::transaction(function () use ($customerOrder, $request): void {
             $customerOrder->releaseStock($request->user());
             $customerOrder->delete();

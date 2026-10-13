@@ -37,11 +37,19 @@ class CustomerOrder extends Model
     }
 
     /**
-     * Ready or completed orders are cancelled instead of deleted so their history is kept.
+     * Completed orders are final: collected and paid, so they can no longer be edited, cancelled, or deleted.
      */
-    public function mustBeCancelledInsteadOfDeleted(): bool
+    public function isLocked(): bool
     {
-        return in_array($this->status, ['ready', 'completed'], true);
+        return $this->status === 'completed';
+    }
+
+    /**
+     * Only orders that were never prepared (pending) or are already cancelled can be deleted.
+     */
+    public function canBeDeleted(): bool
+    {
+        return in_array($this->status, ['pending', 'cancelled'], true);
     }
 
     /**
@@ -67,13 +75,14 @@ class CustomerOrder extends Model
 
     /**
      * Only cancelling or reopening an order moves stock; pending, ready and completed all keep what the order holds.
+     * A pending order's flowers go back to stock when cancelled; a ready order's flowers are already arranged, so they are written off as wastage.
      *
      * @throws ValidationException when a reopened order's flowers are no longer in stock.
      */
     public function applyStatusChangeToStock(User $user, string $previousStatus): void
     {
         if ($previousStatus !== 'cancelled' && $this->status === 'cancelled') {
-            $this->releaseStock($user);
+            $previousStatus === 'ready' ? $this->writeOffStock($user) : $this->releaseStock($user);
         } elseif ($previousStatus === 'cancelled' && $this->status !== 'cancelled') {
             $this->syncStock($user);
         }
@@ -101,6 +110,74 @@ class CustomerOrder extends Model
                 $this->logStockMovement($user, $batch, $quantity, 'Released from order');
             }
         });
+    }
+
+    /**
+     * Record all of this order's flowers as wastage. Stems the order already holds stay out of stock;
+     * stems it never reserved (orders placed before stock tracking) are taken from stock now, soonest-spoiling batch first.
+     */
+    public function writeOffStock(User $user): void
+    {
+        DB::transaction(function () use ($user): void {
+            $note = "Order {$this->order_number} was cancelled after it was prepared.";
+            $heldByBatch = $this->stockAdjustments()->get()
+                ->groupBy('inventory_item_id')
+                ->map(fn ($adjustments): int => (int) -$adjustments->sum('quantity_change'))
+                ->filter(fn (int $quantity): bool => $quantity > 0);
+            $writtenOffByFlower = [];
+
+            foreach ($heldByBatch as $inventoryItemId => $quantity) {
+                $batch = InventoryItem::query()->find($inventoryItemId);
+
+                if (! $batch) {
+                    continue;
+                }
+
+                $this->logStockMovement($user, $batch, $quantity, 'Written off from cancelled order');
+                $this->recordWastage($user, $batch, $quantity, $note);
+                $writtenOffByFlower[$batch->flower_type] = ($writtenOffByFlower[$batch->flower_type] ?? 0) + $quantity;
+            }
+
+            $required = $this->items()->get()->groupBy('flower_type')->map(fn ($items): int => (int) $items->sum('quantity'));
+
+            foreach ($required as $flowerType => $quantity) {
+                $missing = $quantity - ($writtenOffByFlower[$flowerType] ?? 0);
+
+                if ($missing <= 0) {
+                    continue;
+                }
+
+                $batches = InventoryItem::query()->where('flower_type', $flowerType)->where('quantity', '>', 0)
+                    ->lockForUpdate()->get()
+                    ->sortBy(fn (InventoryItem $batch): int => $batch->spoilageDate()->timestamp);
+                $shortfall = max(0, $missing - (int) $batches->sum('quantity'));
+
+                foreach ($batches as $batch) {
+                    if ($missing === 0) {
+                        break;
+                    }
+
+                    $taken = min($missing, $batch->quantity);
+                    $batch->decrement('quantity', $taken);
+                    $this->recordWastage($user, $batch, $taken, $shortfall > 0
+                        ? "{$note} {$shortfall} more {$flowerType} were used but not in stock records."
+                        : $note);
+                    $missing -= $taken;
+                }
+            }
+        });
+    }
+
+    private function recordWastage(User $user, InventoryItem $batch, int $quantity, string $notes): void
+    {
+        $batch->adjustments()->create([
+            'user_id' => $user->id,
+            'type' => 'wastage',
+            'quantity_change' => -$quantity,
+            'unit_cost' => $batch->cost_price,
+            'reason' => 'other',
+            'notes' => $notes,
+        ]);
     }
 
     /**

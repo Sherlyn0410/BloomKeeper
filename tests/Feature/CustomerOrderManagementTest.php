@@ -91,13 +91,43 @@ test('pending orders are deleted', function () {
         ->and(OrderItem::count())->toBe(0);
 });
 
-test('ready and completed orders are cancelled instead of deleted', function (string $status) {
+test('ready and completed orders cannot be deleted', function (string $status) {
     $order = makeOrder(['status' => $status]);
 
-    $this->actingAs($this->staff)->delete(route('staff.orders.destroy', $order))->assertRedirect();
+    $this->actingAs($this->staff)->delete(route('staff.orders.destroy', $order))->assertForbidden();
 
-    expect($order->refresh()->status)->toBe('cancelled');
+    expect($order->refresh()->status)->toBe($status);
 })->with(['ready', 'completed']);
+
+test('completed orders are locked against editing and status changes', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = makeOrder(['status' => 'completed']);
+
+    $this->actingAs($this->staff)->get(route('staff.orders.edit', $order))->assertForbidden();
+    $this->actingAs($this->staff)->put(route('staff.orders.update', $order), [])->assertForbidden();
+    $this->actingAs($admin)->patch(route('admin.orders.status', $order), ['status' => 'cancelled'])->assertForbidden();
+
+    $this->actingAs($admin)->get(route('admin.orders'))
+        ->assertSee('Locked')
+        ->assertDontSee(route('staff.orders.edit', $order))
+        ->assertDontSee(route('admin.orders.status', $order));
+
+    expect($order->refresh()->status)->toBe('completed');
+});
+
+test('order cards only offer delete for pending and cancelled orders', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $pending = makeOrder(['status' => 'pending']);
+    $ready = makeOrder(['status' => 'ready']);
+    $cancelled = makeOrder(['status' => 'cancelled']);
+
+    $this->actingAs($admin)->get(route('admin.orders'))
+        ->assertSee('action="'.route('staff.orders.destroy', $pending).'"', false)
+        ->assertSee('action="'.route('staff.orders.destroy', $cancelled).'"', false)
+        ->assertDontSee('action="'.route('staff.orders.destroy', $ready).'"', false)
+        ->assertSee(route('staff.orders.edit', $ready))
+        ->assertDontSee('Cancel order');
+});
 
 test('admins are sent back to the admin orders page after editing', function () {
     $admin = User::factory()->create(['role' => 'admin']);

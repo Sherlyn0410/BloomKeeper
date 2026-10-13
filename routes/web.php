@@ -74,9 +74,9 @@ Route::middleware('auth')->group(function (): void {
         Route::get('/orders', [StaffOrderController::class, 'index'])->name('orders.index');
         Route::get('/orders/create', [StaffOrderController::class, 'create'])->name('orders.create');
         Route::post('/orders', [StaffOrderController::class, 'store'])->name('orders.store');
-        Route::get('/orders/{customerOrder}/edit', [StaffOrderController::class, 'edit'])->name('orders.edit');
-        Route::put('/orders/{customerOrder}', [StaffOrderController::class, 'update'])->name('orders.update');
-        Route::delete('/orders/{customerOrder}', [StaffOrderController::class, 'destroy'])->name('orders.destroy');
+        Route::get('/orders/{customerOrder}/edit', [StaffOrderController::class, 'edit'])->middleware('can:update-order,customerOrder')->name('orders.edit');
+        Route::put('/orders/{customerOrder}', [StaffOrderController::class, 'update'])->middleware('can:update-order,customerOrder')->name('orders.update');
+        Route::delete('/orders/{customerOrder}', [StaffOrderController::class, 'destroy'])->middleware('can:delete-order,customerOrder')->name('orders.destroy');
         Route::get('/wastage', [WastageController::class, 'create'])->name('wastage.create');
         Route::post('/wastage', [WastageController::class, 'store'])->name('wastage.store');
         Route::middleware('can:edit-wastage,stockAdjustment')->group(function (): void {
@@ -110,7 +110,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/inventory', [AdminOperationsController::class, 'storeInventory'])->name('inventory.store');
         Route::put('/inventory/{inventoryItem}', [AdminOperationsController::class, 'updateInventory'])->name('inventory.update');
         Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
-        Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->name('orders.status');
+        Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->middleware('can:update-order,customerOrder')->name('orders.status');
         Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
         Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->name('purchase-orders.status');
         Route::get('/reports/export', [AdminOperationsController::class, 'exportReport'])->name('reports.export');

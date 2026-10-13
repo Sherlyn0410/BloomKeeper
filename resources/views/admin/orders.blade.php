@@ -115,16 +115,29 @@
                                 <p class="font-bold text-[#1c2e28]">RM {{ number_format($orderTotal, 2) }}</p>
                                 <x-order-actions :order="$order" class="mt-1 justify-end" />
                             </div>
-                            <form method="POST" action="{{ route('admin.orders.status', $order) }}">
-                                @csrf
-                                @method('PATCH')
-                                <label class="sr-only" for="order-status-{{ $order->id }}">Update status</label>
-                                <select id="order-status-{{ $order->id }}" name="status" onchange="this.form.submit()" class="bk-input bk-input-sm text-[#285443]">
-                                    @foreach (['pending' => 'Pending', 'ready' => 'Ready', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $value => $label)
-                                        <option value="{{ $value }}" @selected($order->status === $value)>{{ $label }}</option>
-                                    @endforeach
+                            @if ($order->status === 'cancelled')
+                                <label class="sr-only" for="order-status-{{ $order->id }}">Status</label>
+                                <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't change status here. Use Edit to reopen the order." class="bk-input bk-input-sm cursor-not-allowed bg-[#eef3f1] text-[#8aa39c] shadow-none">
+                                    <option>Cancelled</option>
                                 </select>
-                            </form>
+                            @elseif (! $order->isLocked())
+                                <form method="POST" action="{{ route('admin.orders.status', $order) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <label class="sr-only" for="order-status-{{ $order->id }}">Update status</label>
+                                    <select
+                                        id="order-status-{{ $order->id }}"
+                                        name="status"
+                                        data-current="{{ $order->status }}"
+                                        onchange="if (this.dataset.current === 'ready' && this.value === 'cancelled' && ! confirm(@js("Order {$order->order_number} is already prepared. Cancelling it records its flowers as wastage instead of returning them to stock. Continue?"))) { this.value = this.dataset.current; return; } this.form.submit()"
+                                        class="bk-input bk-input-sm text-[#285443]"
+                                    >
+                                        @foreach (['pending' => 'Pending', 'ready' => 'Ready', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $value => $label)
+                                            <option value="{{ $value }}" @selected($order->status === $value)>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </form>
+                            @endif
                         </div>
                     </div>
 
