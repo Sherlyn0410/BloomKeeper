@@ -15,9 +15,6 @@ class PurchaseOrder extends Model
      */
     public const STATUSES = ['sent', 'fulfilled', 'declined', 'cancelled'];
 
-    /**
-     * Only orders still waiting on the supplier can be fulfilled or declined by them.
-     */
     public function reference(): string
     {
         return 'PO-'.str_pad((string) $this->id, 4, '0', STR_PAD_LEFT);
@@ -31,9 +28,20 @@ class PurchaseOrder extends Model
         return $this->status === 'fulfilled';
     }
 
+    /**
+     * Only orders still waiting on the supplier can be fulfilled or declined by them.
+     */
     public function isAwaitingSupplier(): bool
     {
         return $this->status === 'sent';
+    }
+
+    /**
+     * Details can change until the supplier delivers; editing a declined order sends it to them again.
+     */
+    public function canBeEdited(): bool
+    {
+        return in_array($this->status, ['sent', 'declined'], true);
     }
 
     public function items(): HasMany

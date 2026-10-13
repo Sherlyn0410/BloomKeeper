@@ -14,17 +14,17 @@
     description="Review customer collections, inspect order items, and move each order through fulfilment."
 >
     <section class="bk-card">
-        <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
             <div>
                 <h2 class="bk-card-title">Order queue</h2>
                 <p class="mt-1 text-sm text-[#607a72]">Filter the queue by customer, collection date, or status.</p>
             </div>
-            <form class="flex flex-wrap items-center gap-2">
+            <form class="mt-4 flex flex-wrap items-center gap-2">
                 <input type="hidden" name="status" value="{{ $activeStatus }}">
-                <label class="relative w-full sm:w-auto">
+                <label class="relative w-full sm:w-auto sm:min-w-64 sm:flex-1 lg:max-w-sm">
                     <span class="sr-only">Customer or order number</span>
                     <svg class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8aa39c]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.45 4.39l3.08 3.08a.75.75 0 1 1-1.06 1.06l-3.08-3.08A7 7 0 0 1 2 9Z" clip-rule="evenodd" /></svg>
-                    <input name="customer" value="{{ request('customer') }}" placeholder="Customer or order no." class="bk-input w-full pl-9 sm:w-52">
+                    <input name="customer" value="{{ request('customer') }}" placeholder="Customer or order no." class="bk-input w-full pl-9">
                 </label>
                 <label>
                     <span class="sr-only">Collection date</span>

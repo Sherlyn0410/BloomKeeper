@@ -8,9 +8,11 @@ use App\Models\OrderItem;
 use App\Models\PurchaseOrder;
 use App\Models\StockAdjustment;
 use App\Models\User;
+use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -70,8 +72,24 @@ class AdminOperationsController extends Controller
 
     public function purchaseOrders(Request $request): View
     {
+        $search = trim($request->string('search')->toString());
+        $referenceNumber = preg_match('/^(?:PO-?)?0*(\d+)$/i', $search, $matches) ? (int) $matches[1] : null;
+
+        $purchaseOrders = PurchaseOrder::query()
+            ->when($search !== '', fn ($query) => $query->where(fn ($query) => $query
+                ->where('supplier_name', 'like', "%{$search}%")
+                ->orWhereHas('items', fn ($query) => $query->where('flower_type', 'like', "%{$search}%"))
+                ->when($referenceNumber !== null, fn ($query) => $query->orWhere('id', $referenceNumber))))
+            ->when($request->filled('date'), fn ($query) => $query->whereDate('requested_date', $request->date('date')));
+
+        $statusCounts = (clone $purchaseOrders)->select('status', DB::raw('COUNT(*) as total'))->groupBy('status')->pluck('total', 'status');
+
         return view('admin.purchase-orders', [
-            'purchaseOrders' => PurchaseOrder::query()->with(['items', 'creator'])->latest()->get(),
+            'purchaseOrders' => $purchaseOrders->with(['items', 'creator'])
+                ->when(in_array($request->query('status'), PurchaseOrder::STATUSES, true), fn ($query) => $query->where('status', $request->query('status')))
+                ->latest()
+                ->get(),
+            'statusCounts' => $statusCounts,
             'suppliers' => $this->approvedSuppliers(),
         ]);
     }
@@ -147,16 +165,7 @@ class AdminOperationsController extends Controller
 
     public function storePurchaseOrder(Request $request): RedirectResponse
     {
-        $data = $request->validate([
-            'supplier_id' => ['required', Rule::exists('users', 'id')->where('role', 'supplier')->where('approval_status', 'approved')],
-            'requested_date' => ['required', 'date', 'after_or_equal:today'], 'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:1'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-        ], [
-            'supplier_id.required' => 'Choose the supplier to send this purchase order to.',
-            'requested_date.after_or_equal' => 'The requested date must be today or later.',
-        ]);
-
-        $data['supplier_name'] = User::query()->findOrFail($data['supplier_id'])->name;
+        $data = $this->validatePurchaseOrder($request);
 
         DB::transaction(function () use ($data): void {
             $purchaseOrder = PurchaseOrder::create([...$data, 'created_by' => auth()->id(), 'status' => 'sent']);
@@ -164,6 +173,50 @@ class AdminOperationsController extends Controller
         });
 
         return back()->with('status', 'Purchase order sent.');
+    }
+
+    public function updatePurchaseOrder(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
+    {
+        $data = $this->validatePurchaseOrder($request, $purchaseOrder);
+        $wasDeclined = $purchaseOrder->status === 'declined';
+
+        DB::transaction(function () use ($purchaseOrder, $data): void {
+            $purchaseOrder->update([...$data, 'status' => 'sent', 'supplier_note' => null]);
+            $purchaseOrder->items()->delete();
+            $purchaseOrder->items()->create(['flower_type' => $data['flower_type'], 'quantity' => $data['quantity']]);
+        });
+
+        return back()->with('status', $wasDeclined
+            ? "{$purchaseOrder->reference()} updated and sent to the supplier again."
+            : "{$purchaseOrder->reference()} updated.");
+    }
+
+    /**
+     * The requested date must be today or later, but an existing order may keep the date it already has.
+     *
+     * @return array{supplier_id: int, supplier_name: string, requested_date: string, flower_type: string, quantity: int, notes: ?string}
+     */
+    private function validatePurchaseOrder(Request $request, ?PurchaseOrder $purchaseOrder = null): array
+    {
+        $data = $request->validate([
+            'supplier_id' => ['required', Rule::exists('users', 'id')->where('role', 'supplier')->where('approval_status', 'approved')],
+            'requested_date' => ['required', 'date', function (string $attribute, mixed $value, Closure $fail) use ($purchaseOrder): void {
+                $date = Carbon::parse($value)->startOfDay();
+                $isUnchangedDate = $purchaseOrder !== null && $date->equalTo($purchaseOrder->requested_date);
+
+                if ($date->lt(today()) && ! $isUnchangedDate) {
+                    $fail('The requested date must be today or later.');
+                }
+            }],
+            'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:1'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'supplier_id.required' => 'Choose the supplier to send this purchase order to.',
+        ]);
+
+        $data['supplier_name'] = User::query()->findOrFail($data['supplier_id'])->name;
+
+        return $data;
     }
 
     public function updatePurchaseOrderStatus(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse

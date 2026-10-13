@@ -395,3 +395,92 @@ test('non administrators cannot access operations', function () {
         ->get(route('admin.operations'))
         ->assertForbidden();
 });
+
+test('admins can edit a purchase order before the supplier fulfils it', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $otherSupplier = User::factory()->create(['role' => 'supplier', 'name' => 'Petal Wholesale']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => today()->addDays(2), 'status' => 'sent']);
+    $purchaseOrder->items()->create(['flower_type' => 'Roses', 'quantity' => 40]);
+
+    $this->actingAs($admin)->put(route('admin.purchase-orders.update', $purchaseOrder), [
+        'supplier_id' => $otherSupplier->id, 'requested_date' => today()->addDays(5)->format('Y-m-d'),
+        'flower_type' => 'Tulips', 'quantity' => 25, 'notes' => 'Yellow only',
+    ])->assertSessionHasNoErrors();
+
+    $purchaseOrder->refresh();
+    expect($purchaseOrder)
+        ->status->toBe('sent')
+        ->supplier_id->toBe($otherSupplier->id)
+        ->supplier_name->toBe('Petal Wholesale')
+        ->notes->toBe('Yellow only')
+        ->and($purchaseOrder->requested_date->format('Y-m-d'))->toBe(today()->addDays(5)->format('Y-m-d'))
+        ->and($purchaseOrder->items()->sole()->only(['flower_type', 'quantity']))->toBe(['flower_type' => 'Tulips', 'quantity' => 25]);
+});
+
+test('editing a declined purchase order sends it to the supplier again', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => today()->addDays(2), 'status' => 'declined', 'supplier_note' => 'Too many']);
+
+    $this->actingAs($admin)->put(route('admin.purchase-orders.update', $purchaseOrder), [
+        'supplier_id' => $supplier->id, 'requested_date' => today()->addDays(2)->format('Y-m-d'), 'flower_type' => 'Roses', 'quantity' => 10,
+    ])->assertSessionHasNoErrors();
+
+    expect($purchaseOrder->refresh())
+        ->status->toBe('sent')
+        ->supplier_note->toBeNull();
+});
+
+test('fulfilled and cancelled purchase orders cannot be edited', function (string $status) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => today()->addDays(2), 'status' => $status]);
+
+    $this->actingAs($admin)->get(route('admin.purchase-orders'))->assertDontSee('edit-po-'.$purchaseOrder->id);
+    $this->actingAs($admin)->put(route('admin.purchase-orders.update', $purchaseOrder), [
+        'supplier_id' => $supplier->id, 'requested_date' => today()->addDays(2)->format('Y-m-d'), 'flower_type' => 'Roses', 'quantity' => 10,
+    ])->assertForbidden();
+})->with(['fulfilled', 'cancelled']);
+
+test('an edited purchase order can keep a past requested date but not move to another one', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name, 'requested_date' => today()->subDays(2), 'status' => 'sent']);
+    $payload = fn ($date): array => ['supplier_id' => $supplier->id, 'requested_date' => $date->format('Y-m-d'), 'flower_type' => 'Roses', 'quantity' => 10];
+
+    $this->actingAs($admin)->put(route('admin.purchase-orders.update', $purchaseOrder), $payload(today()->subDays(2)))->assertSessionHasNoErrors();
+    $this->actingAs($admin)->put(route('admin.purchase-orders.update', $purchaseOrder), $payload(today()->subDays(3)))
+        ->assertSessionHasErrors(['requested_date' => 'The requested date must be today or later.']);
+});
+
+test('purchase order history can be searched and filtered', function (array $query, array $visible, array $hidden) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $highland = User::factory()->create(['role' => 'supplier', 'name' => 'Highland Florals']);
+    $petal = User::factory()->create(['role' => 'supplier', 'name' => 'Petal Wholesale']);
+    $orders = [
+        ['supplier' => $highland, 'flower' => 'Roses', 'date' => '2026-10-20', 'status' => 'sent', 'note' => 'first-order'],
+        ['supplier' => $petal, 'flower' => 'Tulips', 'date' => '2026-10-21', 'status' => 'fulfilled', 'note' => 'second-order'],
+        ['supplier' => $petal, 'flower' => 'Lilies', 'date' => '2026-10-20', 'status' => 'declined', 'note' => 'third-order'],
+    ];
+    foreach ($orders as $order) {
+        PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $order['supplier']->id, 'supplier_name' => $order['supplier']->name, 'requested_date' => $order['date'], 'status' => $order['status'], 'notes' => $order['note']])
+            ->items()->create(['flower_type' => $order['flower'], 'quantity' => 10]);
+    }
+
+    $response = $this->actingAs($admin)->get(route('admin.purchase-orders', $query))->assertOk();
+
+    foreach ($visible as $note) {
+        $response->assertSee($note);
+    }
+    foreach ($hidden as $note) {
+        $response->assertDontSee($note);
+    }
+})->with([
+    'PO number' => [['search' => 'PO-0002'], ['second-order'], ['first-order', 'third-order']],
+    'supplier' => [['search' => 'petal'], ['second-order', 'third-order'], ['first-order']],
+    'flower' => [['search' => 'rose'], ['first-order'], ['second-order', 'third-order']],
+    'requested date' => [['date' => '2026-10-20'], ['first-order', 'third-order'], ['second-order']],
+    'status' => [['status' => 'declined'], ['third-order'], ['first-order', 'second-order']],
+    'combined' => [['search' => 'petal', 'date' => '2026-10-20'], ['third-order'], ['first-order', 'second-order']],
+]);
