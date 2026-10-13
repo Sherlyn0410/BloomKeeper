@@ -61,6 +61,14 @@ class CustomerOrder extends Model
     }
 
     /**
+     * Unpaid orders can be settled at any point, including after collection, unless they were cancelled.
+     */
+    public function canBeMarkedPaid(): bool
+    {
+        return $this->payment_status !== 'paid' && $this->status !== 'cancelled';
+    }
+
+    /**
      * Make the stock held by this order match its items: active orders hold their flowers, cancelled orders hold none.
      *
      * @throws ValidationException when there is not enough stock for the order's flowers.

@@ -22,6 +22,17 @@ test('an administrator can add inventory stock', function () {
         ->and($item->cost_price)->toBe('1.20');
 });
 
+test('inventory cannot be received on a future date', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->post(route('admin.inventory.store'), [
+        'flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50, 'cost_price' => 1.20,
+        'date_received' => today()->addDay()->format('Y-m-d'), 'shelf_life_days' => 7, 'low_stock_threshold' => 5,
+    ])->assertSessionHasErrors(['date_received' => 'The date received cannot be in the future.']);
+
+    expect(InventoryItem::count())->toBe(0);
+});
+
 test('an administrator can update orders, purchasing, and export reports', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $order = CustomerOrder::create([

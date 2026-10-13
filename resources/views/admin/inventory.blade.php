@@ -27,7 +27,7 @@
             </label>
             <label class="bk-label">
                 Date received
-                <input name="date_received" type="date" required class="bk-input">
+                <input name="date_received" type="date" max="{{ today()->format('Y-m-d') }}" required class="bk-input">
             </label>
             <label class="bk-label">
                 Shelf life (days)
@@ -184,7 +184,7 @@
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Date received</span>
-                                            <input name="date_received" type="date" value="{{ $item->date_received->format('Y-m-d') }}" required class="bk-input">
+                                            <input name="date_received" type="date" max="{{ today()->format('Y-m-d') }}" value="{{ $item->date_received->format('Y-m-d') }}" required class="bk-input">
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Shelf life (days)</span>

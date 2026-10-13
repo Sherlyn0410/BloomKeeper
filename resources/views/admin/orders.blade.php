@@ -91,7 +91,7 @@
                     </div>
                     <div class="mt-2 flex flex-wrap items-center gap-1.5">
                         <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $statusStyles[$order->status]['badge'] ?? 'bg-[#dce9e6] text-[#49665f]' }}">{{ ucfirst($order->status) }}</span>
-                        <span @class(['rounded-full px-2.5 py-0.5 text-xs font-semibold', 'bg-[#d7f0df] text-[#187849]' => $order->payment_status === 'paid', 'bg-[#dce9e6] text-[#49665f]' => $order->payment_status !== 'paid'])>{{ ucfirst($order->payment_status) }}</span>
+                        <span @class(['rounded-full px-2.5 py-0.5 text-xs font-semibold', 'bg-[#d7f0df] text-[#187849]' => $order->payment_status === 'paid', 'bg-[#fbe8d0] text-[#a5601c]' => $order->payment_status !== 'paid'])>{{ ucfirst($order->payment_status) }}</span>
                         @if ($collectionLabel)
                             <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $collectionLabel['class'] }}">{{ $collectionLabel['text'] }}</span>
                         @endif
@@ -131,16 +131,15 @@
                         </ul>
                     @endif
 
-                    {{-- Footer: actions on the left, status on the right --}}
-                    <div class="mt-4 flex items-center justify-between gap-3 border-t border-[#e3eeeb] pt-3">
-                        <x-order-actions :order="$order" class="shrink-0" />
+                    {{-- Footer: status on the left, actions on the right --}}
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#e3eeeb] pt-3">
                         @if ($order->status === 'cancelled')
                             <label class="sr-only" for="order-status-{{ $order->id }}">Status</label>
-                            <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't be changed. They can only be deleted." class="bk-input bk-input-sm ml-auto w-full max-w-36 min-w-0 flex-1 cursor-not-allowed bg-[#eef3f1] text-[#8aa39c] shadow-none">
+                            <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't be changed. They can only be deleted." class="bk-input bk-input-sm h-8 w-32 cursor-not-allowed bg-[#eef3f1] py-1 text-[#8aa39c]">
                                 <option>Cancelled</option>
                             </select>
                         @elseif (! $order->isLocked())
-                            <form method="POST" action="{{ route('admin.orders.status', $order) }}" class="ml-auto min-w-0 max-w-36 flex-1">
+                            <form method="POST" action="{{ route('admin.orders.status', $order) }}">
                                 @csrf
                                 @method('PATCH')
                                 <label class="sr-only" for="order-status-{{ $order->id }}">Update status</label>
@@ -149,7 +148,7 @@
                                     name="status"
                                     data-current="{{ $order->status }}"
                                     onchange="if (this.dataset.current === 'ready' && this.value === 'cancelled' && ! confirm(@js("Order {$order->order_number} is already prepared. Cancelling it records its flowers as wastage instead of returning them to stock. Continue?"))) { this.value = this.dataset.current; return; } this.form.submit()"
-                                    class="bk-input bk-input-sm w-full text-[#285443]"
+                                    class="bk-input bk-input-sm h-8 w-32 cursor-pointer py-1 text-[#285443]"
                                 >
                                     @foreach (['pending' => 'Pending', 'ready' => 'Ready', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $value => $label)
                                         <option value="{{ $value }}" @selected($order->status === $value)>{{ $label }}</option>
@@ -157,6 +156,20 @@
                                 </select>
                             </form>
                         @endif
+
+                        <div class="ml-auto flex flex-wrap items-center gap-2">
+                            @if ($order->canBeMarkedPaid())
+                                <form method="POST" action="{{ route('admin.orders.paid', $order) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <button type="submit" class="bk-btn bk-btn-primary bk-btn-sm h-8">
+                                        <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.58l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd" /></svg>
+                                        Mark as paid
+                                    </button>
+                                </form>
+                            @endif
+                            <x-order-actions :order="$order" />
+                        </div>
                     </div>
                 </article>
             @empty

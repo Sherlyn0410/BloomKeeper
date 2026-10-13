@@ -106,14 +106,14 @@ class AdminOperationsController extends Controller
 
     public function storeInventory(Request $request): RedirectResponse
     {
-        InventoryItem::create($request->validate($this->inventoryRules()));
+        InventoryItem::create($request->validate($this->inventoryRules(), ['date_received.before_or_equal' => 'The date received cannot be in the future.']));
 
         return back()->with('status', 'Inventory item added.');
     }
 
     public function updateInventory(Request $request, InventoryItem $inventoryItem): RedirectResponse
     {
-        $inventoryItem->update($request->validate($this->inventoryRules()));
+        $inventoryItem->update($request->validate($this->inventoryRules(), ['date_received.before_or_equal' => 'The date received cannot be in the future.']));
 
         return back()->with('status', 'Inventory item updated.');
     }
@@ -136,6 +136,13 @@ class AdminOperationsController extends Controller
         });
 
         return back()->with('status', 'Order status updated.');
+    }
+
+    public function markOrderPaid(CustomerOrder $customerOrder): RedirectResponse
+    {
+        $customerOrder->update(['payment_status' => 'paid']);
+
+        return back()->with('status', "Order {$customerOrder->order_number} marked as paid.");
     }
 
     public function storePurchaseOrder(Request $request): RedirectResponse
@@ -295,7 +302,7 @@ class AdminOperationsController extends Controller
         return [
             'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:0'],
             'unit_price' => ['required', 'numeric', 'min:0'], 'cost_price' => ['required', 'numeric', 'min:0'],
-            'date_received' => ['required', 'date'], 'shelf_life_days' => ['required', 'integer', 'min:1'],
+            'date_received' => ['required', 'date', 'before_or_equal:today'], 'shelf_life_days' => ['required', 'integer', 'min:1'],
             'low_stock_threshold' => ['required', 'integer', 'min:0'],
             'supplier_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'supplier')],
             'notes' => ['nullable', 'string', 'max:1000'],

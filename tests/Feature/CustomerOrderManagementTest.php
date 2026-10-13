@@ -131,6 +131,36 @@ test('order cards only offer delete for pending and cancelled orders', function 
         ->assertDontSee('Cancel order');
 });
 
+test('admins can mark unpaid orders as paid, including completed ones', function (string $status) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = makeOrder(['status' => $status, 'payment_status' => 'unpaid']);
+
+    $this->actingAs($admin)->get(route('admin.orders'))->assertSee('action="'.route('admin.orders.paid', $order).'"', false);
+
+    $this->actingAs($admin)->patch(route('admin.orders.paid', $order))->assertRedirect();
+
+    expect($order->refresh())->payment_status->toBe('paid')->status->toBe($status);
+})->with(['pending', 'completed']);
+
+test('cancelled or already paid orders cannot be marked as paid', function (array $attributes) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $order = makeOrder($attributes);
+
+    $this->actingAs($admin)->get(route('admin.orders'))->assertDontSee('action="'.route('admin.orders.paid', $order).'"', false);
+    $this->actingAs($admin)->patch(route('admin.orders.paid', $order))->assertForbidden();
+})->with([
+    'cancelled' => [['status' => 'cancelled', 'payment_status' => 'unpaid']],
+    'already paid' => [['payment_status' => 'paid']],
+]);
+
+test('staff cannot use the admin mark as paid action', function () {
+    $order = makeOrder(['payment_status' => 'unpaid']);
+
+    $this->actingAs($this->staff)->patch(route('admin.orders.paid', $order))->assertForbidden();
+
+    expect($order->refresh()->payment_status)->toBe('unpaid');
+});
+
 test('admins are sent back to the admin orders page after editing', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $order = makeOrder();
