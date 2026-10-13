@@ -79,15 +79,18 @@ class AdminOperationsController extends Controller
     public function wastage(Request $request): View
     {
         $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date', 'after_or_equal:from']]);
+        [$sort, $direction] = StockAdjustment::resolveWastageSort($request->query('sort'), $request->query('direction'));
 
         return view('admin.wastage', [
             'adjustments' => StockAdjustment::query()->with(['inventoryItem', 'user'])
                 ->where('type', 'wastage')
                 ->when($request->filled('from'), fn ($query) => $query->whereDate('created_at', '>=', $request->date('from')))
                 ->when($request->filled('to'), fn ($query) => $query->whereDate('created_at', '<=', $request->date('to')))
-                ->latest()
+                ->sortedForWastage($sort, $direction)
                 ->paginate(20)
                 ->withQueryString(),
+            'sort' => $sort,
+            'direction' => $direction,
         ]);
     }
 
@@ -300,7 +303,7 @@ class AdminOperationsController extends Controller
     /**
      * Wastage per flower for the requested date range (by date recorded), split by reason and valued at the cost saved when it was recorded.
      *
-     * @return array{rows: array<int, array{flower_type: string, quantity: int, reasons: array<string, int>, value_lost: float, share: float}>, totalQuantity: int, totalValueLost: float, recordCount: int, reportPeriod: string}
+     * @return array{rows: array<int, array{flower_type: string, quantity: int, reasons: array<string, int>, value_lost: float, share: float}>, totalQuantity: int, totalValueLost: float, recordCount: int, reportPeriod: string, sort: string, direction: string}
      */
     private function wastageReport(Request $request): array
     {
@@ -326,10 +329,11 @@ class AdminOperationsController extends Controller
                     'value_lost' => round($flowerAdjustments->sum(fn (StockAdjustment $adjustment): float => abs($adjustment->quantity_change) * (float) ($adjustment->unit_cost ?? $adjustment->inventoryItem->cost_price)), 2),
                     'share' => $totalQuantity > 0 ? $quantity / $totalQuantity : 0.0,
                 ];
-            })
-            ->sortBy('flower_type', SORT_NATURAL | SORT_FLAG_CASE)
-            ->values()
-            ->all();
+            });
+
+        $sort = in_array($request->query('sort'), ['flower_type', 'quantity', 'value_lost'], true) ? $request->query('sort') : 'flower_type';
+        $direction = $request->query('direction') === 'desc' ? 'desc' : 'asc';
+        $rows = $rows->sortBy($sort, SORT_NATURAL | SORT_FLAG_CASE, $direction === 'desc')->values()->all();
 
         return [
             'rows' => $rows,
@@ -337,6 +341,8 @@ class AdminOperationsController extends Controller
             'totalValueLost' => round(array_sum(array_column($rows, 'value_lost')), 2),
             'recordCount' => $adjustments->count(),
             'reportPeriod' => $this->reportPeriod($request),
+            'sort' => $sort,
+            'direction' => $direction,
         ];
     }
 

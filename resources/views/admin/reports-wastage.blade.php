@@ -37,9 +37,11 @@
         <form class="mt-5 flex flex-wrap items-end gap-2">
             <label class="bk-label">From<input name="from" value="{{ request('from') }}" type="date" class="bk-input"></label>
             <label class="bk-label">To<input name="to" value="{{ request('to') }}" type="date" class="bk-input"></label>
+            <input type="hidden" name="sort" value="{{ $sort }}">
+            <input type="hidden" name="direction" value="{{ $direction }}">
             <button class="bk-btn bk-btn-accent">Run report</button>
             @if (request()->hasAny(['from', 'to']))
-                <a href="{{ route('admin.reports.wastage') }}" class="bk-btn bk-btn-ghost">Clear</a>
+                <a href="{{ route('admin.reports.wastage', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
             @endif
         </form>
         <p class="mt-3 text-xs text-[#8aa39c]">Filtered by the date the wastage was recorded.</p>
@@ -49,12 +51,12 @@
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                     <tr>
                         <th class="pb-3">No.</th>
-                        <th class="pb-3">Flower type</th>
+                        <x-admin.sort-header column="flower_type" :sort="$sort" :direction="$direction">Flower type</x-admin.sort-header>
                         @foreach (\App\Models\InventoryItem::WASTAGE_REASONS as $reason)
                             <th class="pb-3 text-right">{{ ucfirst($reason) }}</th>
                         @endforeach
-                        <th class="pb-3 text-right">Total removed</th>
-                        <th class="pb-3 text-right">Value lost (RM)</th>
+                        <x-admin.sort-header column="quantity" :sort="$sort" :direction="$direction" default-direction="desc" class="text-right">Total removed</x-admin.sort-header>
+                        <x-admin.sort-header column="value_lost" :sort="$sort" :direction="$direction" default-direction="desc" class="text-right">Value lost (RM)</x-admin.sort-header>
                         <th class="pb-3 pl-6">% of wastage</th>
                     </tr>
                 </thead>

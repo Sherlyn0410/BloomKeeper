@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,40 @@ class StockAdjustment extends Model
      * How long staff can correct their own wastage records; admins can correct any record at any time.
      */
     public const WASTAGE_EDIT_WINDOW_HOURS = 24;
+
+    /**
+     * Wastage list columns that can be sorted, with the direction used on the first click.
+     */
+    public const WASTAGE_SORTS = ['date' => 'desc', 'flower' => 'asc', 'quantity' => 'desc', 'reason' => 'asc', 'recorded_by' => 'asc'];
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    public static function resolveWastageSort(mixed $sort, mixed $direction): array
+    {
+        $sort = is_string($sort) && array_key_exists($sort, self::WASTAGE_SORTS) ? $sort : 'date';
+        $direction = in_array($direction, ['asc', 'desc'], true) ? $direction : self::WASTAGE_SORTS[$sort];
+
+        return [$sort, $direction];
+    }
+
+    /**
+     * Order wastage records by a list column; ties fall back to the newest record first.
+     *
+     * @param  Builder<StockAdjustment>  $query
+     */
+    public function scopeSortedForWastage(Builder $query, string $sort, string $direction): void
+    {
+        match ($sort) {
+            'flower' => $query->orderBy(InventoryItem::query()->select('flower_type')->whereColumn('inventory_items.id', 'stock_adjustments.inventory_item_id'), $direction),
+            'quantity' => $query->orderBy('quantity_change', $direction === 'desc' ? 'asc' : 'desc'),
+            'reason' => $query->orderBy('reason', $direction),
+            'recorded_by' => $query->orderBy(User::query()->select('name')->whereColumn('users.id', 'stock_adjustments.user_id'), $direction),
+            default => $query->orderBy('created_at', $direction)->orderBy('id', $direction),
+        };
+
+        $query->orderByDesc('created_at')->orderByDesc('id');
+    }
 
     public function isWastageEditableBy(User $user): bool
     {

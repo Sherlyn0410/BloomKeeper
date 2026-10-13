@@ -13,21 +13,23 @@
         <form class="mt-5 flex flex-wrap items-end gap-2">
             <label class="bk-label">From<input name="from" value="{{ request('from') }}" type="date" class="bk-input"></label>
             <label class="bk-label">To<input name="to" value="{{ request('to') }}" type="date" class="bk-input"></label>
+            <input type="hidden" name="sort" value="{{ $sort }}">
+            <input type="hidden" name="direction" value="{{ $direction }}">
             <button class="bk-btn bk-btn-accent">Filter</button>
             @if (request()->filled('from') || request()->filled('to'))
-                <a href="{{ route('admin.wastage') }}" class="bk-btn bk-btn-ghost">Clear</a>
+                <a href="{{ route('admin.wastage', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
             @endif
         </form>
         <div class="mt-6 overflow-x-auto">
             <table class="w-full min-w-[840px] text-left text-sm">
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                     <tr>
-                        <th class="pb-3">Date</th>
-                        <th class="pb-3">Flower</th>
-                        <th class="pb-3 text-right">Quantity removed</th>
-                        <th class="pb-3 pl-6">Reason</th>
+                        <x-admin.sort-header column="date" :sort="$sort" :direction="$direction" default-direction="desc">Date</x-admin.sort-header>
+                        <x-admin.sort-header column="flower" :sort="$sort" :direction="$direction" default-direction="asc">Flower</x-admin.sort-header>
+                        <x-admin.sort-header column="quantity" :sort="$sort" :direction="$direction" default-direction="desc" class="text-right">Quantity removed</x-admin.sort-header>
+                        <x-admin.sort-header column="reason" :sort="$sort" :direction="$direction" default-direction="asc" class="pl-6">Reason</x-admin.sort-header>
                         <th class="pb-3">Notes</th>
-                        <th class="pb-3">Recorded by</th>
+                        <x-admin.sort-header column="recorded_by" :sort="$sort" :direction="$direction" default-direction="asc">Recorded by</x-admin.sort-header>
                         <th class="pb-3 text-right">Actions</th>
                     </tr>
                 </thead>

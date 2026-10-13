@@ -8,7 +8,7 @@
 @php
     $isActive = $sort === $column;
     $nextDirection = $isActive ? ($direction === 'asc' ? 'desc' : 'asc') : $defaultDirection;
-    $url = request()->fullUrlWithQuery(['sort' => $column, 'direction' => $nextDirection]);
+    $url = request()->fullUrlWithQuery(['sort' => $column, 'direction' => $nextDirection, 'page' => null]);
 @endphp
 
 <th {{ $attributes->merge(['class' => 'pb-3']) }} @if ($isActive) aria-sort="{{ $direction === 'asc' ? 'ascending' : 'descending' }}" @endif>

@@ -43,7 +43,14 @@
         <div class="mt-4 overflow-x-auto">
             <table class="w-full min-w-[640px] text-left text-sm">
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
-                    <tr><th class="pb-3">Date</th><th class="pb-3">Flower</th><th class="pb-3 text-right">Removed</th><th class="pb-3 pl-6">Reason</th><th class="pb-3">By</th><th class="pb-3 text-right">Actions</th></tr>
+                    <tr>
+                        <x-admin.sort-header column="date" :sort="$sort" :direction="$direction" default-direction="desc">Date</x-admin.sort-header>
+                        <x-admin.sort-header column="flower" :sort="$sort" :direction="$direction" default-direction="asc">Flower</x-admin.sort-header>
+                        <x-admin.sort-header column="quantity" :sort="$sort" :direction="$direction" default-direction="desc" class="text-right">Removed</x-admin.sort-header>
+                        <x-admin.sort-header column="reason" :sort="$sort" :direction="$direction" default-direction="asc" class="pl-6">Reason</x-admin.sort-header>
+                        <x-admin.sort-header column="recorded_by" :sort="$sort" :direction="$direction" default-direction="asc">By</x-admin.sort-header>
+                        <th class="pb-3 text-right">Actions</th>
+                    </tr>
                 </thead>
                 <tbody class="divide-y divide-[#dce9e6]">
                     @forelse ($recentWastage as $adjustment)

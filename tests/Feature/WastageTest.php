@@ -222,3 +222,70 @@ test('admins can correct any wastage record at any time', function () {
 
     expect($this->item->refresh()->quantity)->toBe(8);
 });
+
+test('wastage history can be sorted by each column', function (array $query, array $expectedOrder) {
+    $admin = User::factory()->create(['role' => 'admin', 'name' => 'Zara Admin']);
+    $staff = User::factory()->create(['role' => 'staff', 'name' => 'Amir Staff']);
+    $roses = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50, 'cost_price' => 1.00, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $tulips = InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 20, 'unit_price' => 1.80, 'cost_price' => 0.90, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+
+    $this->travelTo('2026-10-01 09:00:00');
+    $tulips->recordWastage($admin, 2, 'other', 'first-note');
+    $this->travelTo('2026-10-02 09:00:00');
+    $this->item->recordWastage($staff, 7, 'expired', 'second-note');
+    $this->travelTo('2026-10-03 09:00:00');
+    $roses->recordWastage($admin, 4, 'damaged', 'third-note');
+
+    $this->actingAs($admin)
+        ->get(route('admin.wastage', $query))
+        ->assertOk()
+        ->assertSeeInOrder($expectedOrder);
+})->with([
+    'newest first by default' => [[], ['third-note', 'second-note', 'first-note']],
+    'oldest first' => [['sort' => 'date', 'direction' => 'asc'], ['first-note', 'second-note', 'third-note']],
+    'flower A to Z' => [['sort' => 'flower', 'direction' => 'asc'], ['second-note', 'third-note', 'first-note']],
+    'largest quantity first' => [['sort' => 'quantity', 'direction' => 'desc'], ['second-note', 'third-note', 'first-note']],
+    'smallest quantity first' => [['sort' => 'quantity', 'direction' => 'asc'], ['first-note', 'third-note', 'second-note']],
+    'reason A to Z' => [['sort' => 'reason', 'direction' => 'asc'], ['third-note', 'second-note', 'first-note']],
+    'recorded by A to Z' => [['sort' => 'recorded_by', 'direction' => 'asc'], ['second-note', 'third-note', 'first-note']],
+    'unknown column falls back to newest first' => [['sort' => 'notes'], ['third-note', 'second-note', 'first-note']],
+]);
+
+test('recent wastage sorts only the latest ten records', function () {
+    foreach (range(1, 11) as $day) {
+        $this->travelTo(sprintf('2026-10-%02d 09:00:00', $day));
+        $this->item->recordWastage($this->staff, $day === 1 ? 9 : 1, 'expired');
+        $this->item->update(['quantity' => 20]);
+    }
+
+    $response = $this->actingAs($this->staff)->get(route('staff.wastage.create', ['sort' => 'quantity', 'direction' => 'desc']));
+
+    expect($response->viewData('recentWastage'))->toHaveCount(10)
+        ->and($response->viewData('recentWastage')->pluck('quantity_change')->unique()->all())->toBe([-1]);
+});
+
+test('the wastage report can be sorted and the export follows the sort', function (array $query, array $expectedOrder) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $roses = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 20, 'unit_price' => 2.50, 'cost_price' => 5.00, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $tulips = InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 20, 'unit_price' => 1.80, 'cost_price' => 0.10, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $this->item->recordWastage($this->staff, 2, 'expired');
+    $roses->recordWastage($this->staff, 1, 'damaged');
+    $tulips->recordWastage($this->staff, 9, 'other');
+
+    $this->actingAs($admin)
+        ->get(route('admin.reports.wastage', $query))
+        ->assertOk()
+        ->assertSeeInOrder($expectedOrder);
+
+    $path = tempnam(sys_get_temp_dir(), 'report');
+    file_put_contents($path, $this->actingAs($admin)->get(route('admin.reports.wastage.export', $query))->streamedContent());
+    $sheet = IOFactory::load($path)->getActiveSheet();
+    unlink($path);
+
+    expect([$sheet->getCell('B6')->getValue(), $sheet->getCell('B7')->getValue(), $sheet->getCell('B8')->getValue()])->toBe($expectedOrder);
+})->with([
+    'flower A to Z by default' => [[], ['Lilies', 'Roses', 'Tulips']],
+    'most removed first' => [['sort' => 'quantity', 'direction' => 'desc'], ['Tulips', 'Lilies', 'Roses']],
+    'highest value lost first' => [['sort' => 'value_lost', 'direction' => 'desc'], ['Roses', 'Lilies', 'Tulips']],
+    'unknown column falls back to flower' => [['sort' => 'expired'], ['Lilies', 'Roses', 'Tulips']],
+]);

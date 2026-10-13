@@ -13,14 +13,18 @@ class WastageController extends Controller
 {
     public function create(Request $request): View
     {
+        [$sort, $direction] = StockAdjustment::resolveWastageSort($request->query('sort'), $request->query('direction'));
+        $recentIds = StockAdjustment::query()->where('type', 'wastage')->latest()->latest('id')->limit(10)->pluck('id');
+
         return view('staff.wastage', [
             'inventory' => InventoryItem::query()->orderBy('flower_type')->orderBy('date_received')->get(),
             'selectedItemId' => $request->integer('item') ?: null,
             'recentWastage' => StockAdjustment::query()->with(['inventoryItem', 'user'])
-                ->where('type', 'wastage')
-                ->latest()
-                ->limit(10)
+                ->whereIn('id', $recentIds)
+                ->sortedForWastage($sort, $direction)
                 ->get(),
+            'sort' => $sort,
+            'direction' => $direction,
         ]);
     }
 
