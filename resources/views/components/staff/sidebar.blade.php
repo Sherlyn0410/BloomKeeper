@@ -7,6 +7,7 @@
 
     if (auth()->user()->can('supply-orders')) {
         $navigation[] = ['label' => 'Purchase orders', 'route' => 'supplier.purchase-orders.index', 'active' => request()->routeIs('supplier.purchase-orders.*')];
+        $navigation[] = ['label' => 'Returns', 'route' => 'supplier.stock-returns.index', 'active' => request()->routeIs('supplier.stock-returns.*')];
     }
 
     if (auth()->user()->can('manage-customers')) {
@@ -20,6 +21,7 @@
             ]],
             ['label' => 'Purchase orders', 'route' => 'staff.purchase-orders', 'active' => request()->routeIs('staff.purchase-orders')],
             ['label' => 'Record wastage', 'route' => 'staff.wastage.create', 'active' => request()->routeIs('staff.wastage.*')],
+            ['label' => 'Stock returns', 'route' => 'staff.stock-returns', 'active' => request()->routeIs('staff.stock-returns')],
         ];
     }
 @endphp

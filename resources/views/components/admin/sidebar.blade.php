@@ -9,6 +9,7 @@
             ['label' => 'Stock list', 'route' => 'admin.inventory', 'active' => request()->routeIs('admin.inventory', 'admin.operations')],
             ['label' => 'Record wastage', 'route' => 'staff.wastage.create', 'active' => request()->routeIs('staff.wastage.create')],
             ['label' => 'Wastage history', 'route' => 'admin.wastage', 'active' => request()->routeIs('admin.wastage', 'staff.wastage.edit')],
+            ['label' => 'Stock returns', 'route' => 'admin.stock-returns', 'active' => request()->routeIs('admin.stock-returns')],
         ]],
         ['label' => 'Orders', 'children' => [
             ['label' => 'All orders', 'route' => 'admin.orders', 'active' => request()->routeIs('admin.orders', 'staff.orders.index', 'staff.orders.edit')],

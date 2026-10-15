@@ -8,7 +8,9 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StaffCustomerController;
 use App\Http\Controllers\StaffDashboardController;
 use App\Http\Controllers\StaffOrderController;
+use App\Http\Controllers\StockReturnController;
 use App\Http\Controllers\SupplierPurchaseOrderController;
+use App\Http\Controllers\SupplierStockReturnController;
 use App\Http\Controllers\WastageController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
@@ -29,6 +31,10 @@ $sharedOperationsRoutes = function (): void {
     Route::post('/inventory', [AdminOperationsController::class, 'storeInventory'])->name('inventory.store');
     Route::put('/inventory/{inventoryItem}', [AdminOperationsController::class, 'updateInventory'])->name('inventory.update');
     Route::delete('/inventory/{inventoryItem}', [AdminOperationsController::class, 'deleteInventory'])->name('inventory.destroy');
+    Route::post('/purchase-orders/{purchaseOrder}/receive', [AdminOperationsController::class, 'receivePurchaseOrder'])->middleware('can:receive-purchase-order,purchaseOrder')->name('purchase-orders.receive');
+    Route::get('/stock-returns', [StockReturnController::class, 'index'])->name('stock-returns');
+    Route::post('/stock-returns', [StockReturnController::class, 'store'])->name('stock-returns.store');
+    Route::patch('/stock-returns/{stockReturn}/cancel', [StockReturnController::class, 'cancel'])->middleware('can:cancel-stock-return,stockReturn')->name('stock-returns.cancel');
     Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->middleware('can:update-order,customerOrder')->name('orders.status');
     Route::patch('/orders/{customerOrder}/paid', [AdminOperationsController::class, 'markOrderPaid'])->middleware('can:mark-order-paid,customerOrder')->name('orders.paid');
     Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
@@ -90,6 +96,11 @@ Route::middleware('auth')->group(function () use ($sharedOperationsRoutes): void
         Route::middleware('can:respond-purchase-order,purchaseOrder')->group(function (): void {
             Route::patch('/purchase-orders/{purchaseOrder}/fulfill', [SupplierPurchaseOrderController::class, 'fulfill'])->name('purchase-orders.fulfill');
             Route::patch('/purchase-orders/{purchaseOrder}/decline', [SupplierPurchaseOrderController::class, 'decline'])->name('purchase-orders.decline');
+        });
+        Route::get('/returns', [SupplierStockReturnController::class, 'index'])->name('stock-returns.index');
+        Route::middleware('can:respond-stock-return,stockReturn')->group(function (): void {
+            Route::patch('/returns/{stockReturn}/accept', [SupplierStockReturnController::class, 'accept'])->name('stock-returns.accept');
+            Route::patch('/returns/{stockReturn}/reject', [SupplierStockReturnController::class, 'reject'])->name('stock-returns.reject');
         });
     });
 
