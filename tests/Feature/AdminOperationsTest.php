@@ -356,7 +356,7 @@ test('fulfilled purchase orders are locked and cannot go back to sent or cancell
 
     $this->actingAs($admin)->patch(route('admin.purchase-orders.status', $purchaseOrder), ['status' => $status])->assertForbidden();
     $this->actingAs($admin)->get(route('admin.purchase-orders'))
-        ->assertSee('Locked')
+        ->assertSee('Receive into stock')
         ->assertDontSee(route('admin.purchase-orders.status', $purchaseOrder));
 
     expect($purchaseOrder->refresh()->status)->toBe('fulfilled');
@@ -484,3 +484,124 @@ test('purchase order history can be searched and filtered', function (array $que
     'status' => [['status' => 'declined'], ['third-order'], ['first-order', 'second-order']],
     'combined' => [['search' => 'petal', 'date' => '2026-10-20'], ['third-order'], ['first-order', 'second-order']],
 ]);
+
+test('inventory groups batches by flower with a total and where each batch came from', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $supplier = User::factory()->create(['role' => 'supplier', 'name' => 'Abu']);
+    $purchaseOrder = PurchaseOrder::create(['created_by' => $admin->id, 'supplier_id' => $supplier->id, 'supplier_name' => 'Abu', 'requested_date' => today(), 'status' => 'fulfilled']);
+    $manual = InventoryItem::create(['flower_type' => 'Black Roses', 'quantity' => 40, 'unit_price' => 3.50, 'cost_price' => 2.50, 'date_received' => today(), 'shelf_life_days' => 5, 'low_stock_threshold' => 50, 'supplier_id' => $supplier->id]);
+    $received = InventoryItem::create(['flower_type' => 'Black Roses', 'quantity' => 90, 'unit_price' => 3.50, 'cost_price' => 2.50, 'date_received' => today(), 'shelf_life_days' => 5, 'low_stock_threshold' => 50, 'supplier_id' => $supplier->id, 'purchase_order_id' => $purchaseOrder->id]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))
+        ->assertOk()
+        ->assertSeeInOrder(['Black Roses', '>130</td>', '2 batches', "Batch #{$manual->id}", 'added manually', "Batch #{$received->id}", 'from PO-0001'], false)
+        ->assertDontSee('Low stock</span>', false);
+});
+
+test('the sell first batch is the one customer orders take from', function () {
+    $staff = User::factory()->create(['role' => 'staff']);
+    $later = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 30, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    $sooner = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 30, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today()->subDays(2), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+
+    $this->actingAs($staff)->get(route('staff.inventory'))
+        ->assertSeeInOrder(["Batch #{$sooner->id}", 'Sell first', "Batch #{$later->id}"]);
+
+    $order = CustomerOrder::create(['created_by' => $staff->id, 'customer_name' => 'Priya', 'collection_date' => today()->addDay(), 'status' => 'pending']);
+    OrderItem::create(['customer_order_id' => $order->id, 'flower_type' => 'Roses', 'quantity' => 5, 'unit_price' => 2.50]);
+    $order->syncStock($staff);
+
+    expect($sooner->refresh()->quantity)->toBe(25)
+        ->and($later->refresh()->quantity)->toBe(30);
+});
+
+test('low stock is judged on the flower total, not each batch', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 4, 'unit_price' => 1.80, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 8]);
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 3, 'unit_price' => 1.80, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 8]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))->assertSeeInOrder(['Tulips', 'Low stock', '>7</td>'], false);
+
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 5, 'unit_price' => 1.80, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 8]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))->assertSee('>12</td>', false)->assertDontSee('Low stock</span>', false);
+});
+
+test('the flower summary shows its margin', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 10, 'unit_price' => 3.50, 'cost_price' => 2.50, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 2]);
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 10, 'unit_price' => 3.50, 'cost_price' => 2.50, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 2]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))->assertSeeInOrder(['Roses', 'RM 3.50', 'RM 1.00', '2 batches']);
+});
+
+test('batch rows only repeat pricing when the batches are priced differently', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $batch = ['flower_type' => 'Roses', 'quantity' => 10, 'unit_price' => 3.50, 'cost_price' => 2.50, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 2];
+    InventoryItem::create($batch);
+    InventoryItem::create($batch);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))->assertDontSee('cost RM 2.50');
+
+    InventoryItem::create([...$batch, 'cost_price' => 2.80]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))
+        ->assertSee('RM 0.70 – 1.00')
+        ->assertSee('cost RM 2.50')
+        ->assertSee('cost RM 2.80');
+});
+
+test('an emptied batch with history cannot be topped up again', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $roses = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 5, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 2]);
+    $roses->recordWastage($admin, 5, 'damaged');
+    $payload = ['flower_type' => 'Roses', 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today()->format('Y-m-d'), 'shelf_life_days' => 7, 'low_stock_threshold' => 2];
+
+    $this->actingAs($admin)->get(route('admin.inventory', ['show_empty' => 1]))
+        ->assertSeeInOrder(["Batch #{$roses->id}", 'title="This batch is empty.">Edit', 'title="This batch is empty.">Wastage', 'title="This batch is empty.">Delete'], false)
+        ->assertDontSee("document.getElementById('edit-stock-{$roses->id}').showModal()", false);
+
+    $this->actingAs($admin)->put(route('admin.inventory.update', $roses), [...$payload, 'quantity' => 50])
+        ->assertSessionHasErrors(['quantity' => "Batch #{$roses->id} is empty. To add new Roses, use Add stock item or Receive into stock."]);
+    $this->actingAs($admin)->put(route('admin.inventory.update', $roses), [...$payload, 'quantity' => 0, 'notes' => 'Sold out'])->assertSessionHasNoErrors();
+
+    expect($roses->refresh())->quantity->toBe(0)->notes->toBe('Sold out');
+});
+
+test('an empty batch without history can still be corrected', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $roses = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 0, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 2]);
+
+    $this->actingAs($admin)->put(route('admin.inventory.update', $roses), [
+        'flower_type' => 'Roses', 'quantity' => 30, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today()->format('Y-m-d'), 'shelf_life_days' => 7, 'low_stock_threshold' => 2,
+    ])->assertSessionHasNoErrors();
+
+    expect($roses->refresh()->quantity)->toBe(30);
+});
+
+test('sold out batches are hidden until asked for', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $soldOut = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 0, 'unit_price' => 2.00, 'cost_price' => 1.80, 'date_received' => today()->subDays(5), 'shelf_life_days' => 7, 'low_stock_threshold' => 2]);
+    $inStock = InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 30, 'unit_price' => 2.50, 'cost_price' => 1.20, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 2]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))
+        ->assertSee("Batch #{$inStock->id}")
+        ->assertDontSee("Batch #{$soldOut->id}")
+        ->assertSee('1 batch')
+        ->assertSee('Show empty batches (1)')
+        ->assertDontSee('name="show_empty" value="1" checked', false)
+        ->assertSee('RM 1.30')
+        ->assertDontSee('RM 0.20');
+
+    $this->actingAs($admin)->get(route('admin.inventory', ['show_empty' => 1]))
+        ->assertSee("Batch #{$soldOut->id}")
+        ->assertSee('name="show_empty" value="1" checked', false);
+});
+
+test('a flower with every batch sold out stays listed as out of stock with a reorder button', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    InventoryItem::create(['flower_type' => 'Lilies', 'quantity' => 0, 'unit_price' => 3.25, 'cost_price' => 1.70, 'date_received' => today()->subDays(3), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))
+        ->assertSeeInOrder(['Lilies', 'Out of stock', '>0</td>', 'No batches in stock'], false)
+        ->assertSee('>Reorder</a>', false);
+});

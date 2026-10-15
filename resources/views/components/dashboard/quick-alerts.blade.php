@@ -23,9 +23,10 @@
                         {{ $isLowStock ? 'Low stock' : 'Spoilage' }}
                     </span>
                 </div>
-                <p class="mt-1 text-sm {{ $textColor }}">
+                <p class="mt-1 flex items-center justify-between gap-2 text-sm {{ $textColor }}">
                     @if ($isLowStock)
-                        {{ $alert->quantity }} remaining
+                        <span>{{ $alert->quantity }} remaining</span>
+                        <a href="{{ route((auth()->user()->can('manage-users') ? 'admin' : 'staff').'.purchase-orders', $alert->reorderQuery()) }}#create-purchase-order" class="shrink-0 text-xs font-semibold text-[#285443] underline underline-offset-2">Reorder</a>
                     @else
                         Check by {{ $alert->date_received->copy()->addDays($alert->shelf_life_days)->format('d M Y') }}
                     @endif

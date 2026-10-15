@@ -93,6 +93,21 @@
                         @if ($purchaseOrder->fulfilled_at)
                             <p class="mt-3 text-sm text-[#187849]">Fulfilled on {{ $purchaseOrder->fulfilled_at->timezone('Asia/Kuala_Lumpur')->format('d M Y, h:i A') }}</p>
                         @endif
+                        @if ($purchaseOrder->receivedBatch)
+                            @php
+                                $receivedDifference = $purchaseOrder->receivedDifference();
+                            @endphp
+                            <p @class(['mt-2 rounded-lg px-3 py-2 text-sm', 'bg-[#fbeae7] text-[#b84331]' => $receivedDifference < 0, 'bg-[#edf7f5] text-[#285443]' => $receivedDifference >= 0])>
+                                <span class="font-semibold">Shop received {{ $purchaseOrder->received_quantity }} of {{ $purchaseOrder->orderedQuantity() }}</span>
+                                @if ($receivedDifference < 0)
+                                    · {{ abs($receivedDifference) }} short.
+                                @elseif ($receivedDifference > 0)
+                                    · {{ $receivedDifference }} extra.
+                                @else
+                                    · everything arrived.
+                                @endif
+                            </p>
+                        @endif
                     @endif
                 </article>
             @empty

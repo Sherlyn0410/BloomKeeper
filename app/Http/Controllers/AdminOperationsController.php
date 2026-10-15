@@ -32,23 +32,56 @@ class AdminOperationsController extends Controller
     public function inventory(Request $request): View
     {
         $sortableColumns = [
-            'flower_type' => fn (InventoryItem $item): string => strtolower($item->flower_type),
-            'quantity' => fn (InventoryItem $item): int => $item->quantity,
-            'date_received' => fn (InventoryItem $item): int => $item->date_received->timestamp,
-            'spoilage_date' => fn (InventoryItem $item): int => $item->spoilageDate()->timestamp,
+            'flower_type' => fn (array $group): string => strtolower($group['flower_type']),
+            'quantity' => fn (array $group): int => $group['total'],
+            'date_received' => fn (array $group): int => $group['latest_received']->timestamp,
+            'spoilage_date' => fn (array $group): int => $group['earliest_spoilage']->timestamp,
         ];
         $sort = array_key_exists($request->query('sort'), $sortableColumns) ? $request->query('sort') : 'flower_type';
         $direction = $request->query('direction') === 'desc' ? 'desc' : 'asc';
 
+        $batches = InventoryItem::query()->with(['supplier', 'purchaseOrder'])->withExists('adjustments')
+            ->when($request->filled('search'), fn ($query) => $query->where('flower_type', 'like', '%'.$request->string('search').'%'))
+            ->orderBy('id')->get();
+
         return view('admin.inventory', [
-            'inventory' => InventoryItem::query()->with('supplier')->withExists('adjustments')
-                ->when($request->filled('search'), fn ($query) => $query->where('flower_type', 'like', '%'.$request->string('search').'%'))
-                ->orderBy('flower_type')->get()
-                ->sortBy($sortableColumns[$sort], SORT_REGULAR, $direction === 'desc')->values(),
+            'flowerGroups' => $batches->groupBy(fn (InventoryItem $batch): string => strtolower($batch->flower_type))
+                ->map(fn (Collection $flowerBatches): array => $this->flowerGroup($flowerBatches))
+                ->sortBy($sortableColumns[$sort], SORT_REGULAR, $direction === 'desc')
+                ->values(),
             'suppliers' => $this->approvedSuppliers(),
             'sort' => $sort,
             'direction' => $direction,
         ]);
+    }
+
+    /**
+     * One flower's batches in the order customer orders use them (soonest to spoil, then first added),
+     * with the flower's total stock and which batch is used next.
+     *
+     * @param  Collection<int, InventoryItem>  $flowerBatches
+     * @return array{flower_type: string, batches: Collection<int, InventoryItem>, total: int, is_low_stock: bool, sell_first_id: ?int, reorder_query: array{flower: string, supplier: ?int}, latest_received: Carbon, earliest_spoilage: Carbon}
+     */
+    private function flowerGroup(Collection $flowerBatches): array
+    {
+        $batches = $flowerBatches->sortBy([
+            fn (InventoryItem $a, InventoryItem $b): int => $a->spoilageDate() <=> $b->spoilageDate(),
+            fn (InventoryItem $a, InventoryItem $b): int => $a->id <=> $b->id,
+        ])->values();
+        $stocked = $batches->filter(fn (InventoryItem $batch): bool => $batch->quantity > 0);
+        $newest = $batches->sortBy([['date_received', 'desc'], ['id', 'desc']])->first();
+        $total = (int) $batches->sum('quantity');
+
+        return [
+            'flower_type' => $newest->flower_type,
+            'batches' => $batches,
+            'total' => $total,
+            'is_low_stock' => $total <= $newest->low_stock_threshold,
+            'sell_first_id' => $stocked->count() > 1 ? $stocked->first()->id : null,
+            'reorder_query' => $newest->reorderQuery(),
+            'latest_received' => $newest->date_received,
+            'earliest_spoilage' => ($stocked->first() ?? $batches->first())->spoilageDate(),
+        ];
     }
 
     public function orders(Request $request): View
@@ -85,12 +118,14 @@ class AdminOperationsController extends Controller
         $statusCounts = (clone $purchaseOrders)->select('status', DB::raw('COUNT(*) as total'))->groupBy('status')->pluck('total', 'status');
 
         return view('admin.purchase-orders', [
-            'purchaseOrders' => $purchaseOrders->with(['items', 'creator'])
+            'purchaseOrders' => $purchaseOrders->with(['items', 'creator', 'receivedBatch'])
                 ->when(in_array($request->query('status'), PurchaseOrder::STATUSES, true), fn ($query) => $query->where('status', $request->query('status')))
                 ->latest()
                 ->get(),
             'statusCounts' => $statusCounts,
             'suppliers' => $this->approvedSuppliers(),
+            'latestBatches' => InventoryItem::query()->orderBy('date_received')->orderBy('id')->get()
+                ->keyBy(fn (InventoryItem $item): string => strtolower($item->flower_type)),
         ]);
     }
 
@@ -131,7 +166,13 @@ class AdminOperationsController extends Controller
 
     public function updateInventory(Request $request, InventoryItem $inventoryItem): RedirectResponse
     {
-        $inventoryItem->update($request->validate($this->inventoryRules(), ['date_received.before_or_equal' => 'The date received cannot be in the future.']));
+        $data = $request->validate($this->inventoryRules(), ['date_received.before_or_equal' => 'The date received cannot be in the future.']);
+
+        if ($inventoryItem->isClosedEmpty() && (int) $data['quantity'] > 0) {
+            return back()->withErrors(['quantity' => "Batch #{$inventoryItem->id} is empty. To add new {$inventoryItem->flower_type}, use Add stock item or Receive into stock."]);
+        }
+
+        $inventoryItem->update($data);
 
         return back()->with('status', 'Inventory item updated.');
     }
@@ -221,6 +262,26 @@ class AdminOperationsController extends Controller
         $data['supplier_name'] = User::query()->findOrFail($data['supplier_id'])->name;
 
         return $data;
+    }
+
+    /**
+     * Add a fulfilled delivery to stock as a new batch from that purchase order's supplier.
+     * The quantity can differ from what was ordered when the delivery arrived short.
+     */
+    public function receivePurchaseOrder(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
+    {
+        $data = $request->validate(
+            [...collect($this->inventoryRules())->except('supplier_id')->all(), 'quantity' => ['required', 'integer', 'min:1']],
+            ['date_received.before_or_equal' => 'The date received cannot be in the future.'],
+        );
+
+        $batch = DB::transaction(function () use ($data, $purchaseOrder): InventoryItem {
+            $purchaseOrder->update(['received_quantity' => $data['quantity']]);
+
+            return InventoryItem::create([...$data, 'supplier_id' => $purchaseOrder->supplier_id, 'purchase_order_id' => $purchaseOrder->id]);
+        });
+
+        return back()->with('status', "{$batch->quantity} {$batch->flower_type} from {$purchaseOrder->reference()} added to stock.");
     }
 
     public function updatePurchaseOrderStatus(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse

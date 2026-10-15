@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\CustomerOrder;
 use App\Models\PurchaseOrder;
 use App\Models\StockAdjustment;
+use App\Models\StockReturn;
 use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -37,7 +38,11 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('edit-purchase-order', fn (User $user, PurchaseOrder $order): bool => $user->role === 'admin' && $order->canBeEdited());
         Gate::define('update-purchase-order', fn (User $user, PurchaseOrder $order): bool => ! $order->isLocked()
             && ($user->role === 'admin' || $order->created_by === $user->id));
+        Gate::define('receive-purchase-order', fn (User $user, PurchaseOrder $order): bool => $order->canBeReceived());
         Gate::define('respond-purchase-order', fn (User $user, PurchaseOrder $order): bool => $order->supplier_id === $user->id && $order->isAwaitingSupplier());
+        Gate::define('cancel-stock-return', fn (User $user, StockReturn $stockReturn): bool => $stockReturn->isAwaitingSupplier()
+            && ($user->role === 'admin' || $stockReturn->created_by === $user->id));
+        Gate::define('respond-stock-return', fn (User $user, StockReturn $stockReturn): bool => $stockReturn->supplier_id === $user->id && $stockReturn->isAwaitingSupplier());
         Gate::define('edit-wastage', fn (User $user, StockAdjustment $adjustment): bool => $adjustment->isWastageEditableBy($user));
         Gate::define('manage-customers', fn (User $user): bool => in_array($user->role, ['admin', 'staff'], true) && $user->approval_status === 'approved');
 

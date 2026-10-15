@@ -1,20 +1,26 @@
 @php
     // Admins and staff share this page; links and forms stay inside the viewer's own area.
     $area = auth()->user()->can('manage-users') ? 'admin' : 'staff';
-    // When an edit fails validation, its old input belongs to that edit dialog, not to the create form.
+    // When an edit or receive dialog fails validation, its old input belongs to that dialog, not to the create form.
     $failedEditId = (int) old('editing_purchase_order');
-    $createOld = fn (string $key): mixed => $failedEditId ? null : old($key);
+    $failedReceiveId = (int) old('receiving_purchase_order');
+    // A Reorder link from a low-stock alert pre-fills the create form.
+    $reorder = array_filter(['supplier_id' => request('supplier'), 'flower_type' => request('flower')]);
+    $createOld = fn (string $key): mixed => $failedEditId || $failedReceiveId ? null : old($key, $reorder[$key] ?? null);
 @endphp
 
 <x-workspace.layout
     title="Purchase Orders"
     description="Create supplier requests and track which flower deliveries are sent, fulfilled, or cancelled."
 >
-    <section class="bk-card">
+    <section class="bk-card scroll-mt-4" id="create-purchase-order">
         <div>
             <h2 class="bk-card-title">Create purchase order</h2>
             <p class="mt-1 text-sm text-[#607a72]">Send a request to an approved supplier. They see it in their account and mark it fulfilled.</p>
         </div>
+        @if (isset($reorder['flower_type']) && ! $errors->any())
+            <p class="mt-4 rounded-xl bg-[#fff0d5] px-3 py-2 text-sm text-[#a76513]">{{ $reorder['flower_type'] }} stock is low. {{ $suppliers->contains('id', (int) ($reorder['supplier_id'] ?? 0)) ? 'The previous supplier has been selected. Please enter the quantity required.' : 'Please select a supplier and enter the quantity required.' }}</p>
+        @endif
         @if ($suppliers->isEmpty())
             <p class="mt-4 rounded-xl bg-[#fff0d5] px-3 py-2 text-sm text-[#a76513]">No approved suppliers yet. @can('manage-users') Approve one under <a href="{{ route('admin.users', ['role' => 'supplier']) }}" class="font-semibold underline">Manage Users → Suppliers</a>. @else Ask an administrator to approve a supplier account. @endcan</p>
         @endif
@@ -55,7 +61,12 @@
         @php
             $activeStatus = in_array(request('status'), \App\Models\PurchaseOrder::STATUSES, true) ? request('status') : '';
             $isFiltered = request()->filled('search') || request()->filled('date');
-            $statusDots = ['sent' => 'bg-[#a76513]', 'fulfilled' => 'bg-[#187849]', 'declined' => 'bg-[#b84331]', 'cancelled' => 'bg-[#8aa39c]'];
+            $statusStyles = [
+                'sent' => ['label' => 'Sent', 'badge' => 'bg-[#fff0d5] text-[#a76513]', 'dot' => 'bg-[#a76513]'],
+                'fulfilled' => ['label' => 'Fulfilled', 'badge' => 'bg-[#d7f0df] text-[#187849]', 'dot' => 'bg-[#187849]'],
+                'declined' => ['label' => 'Declined', 'badge' => 'bg-[#f5dcd7] text-[#b84331]', 'dot' => 'bg-[#b84331]'],
+                'cancelled' => ['label' => 'Cancelled', 'badge' => 'bg-[#dce9e6] text-[#49665f]', 'dot' => 'bg-[#8aa39c]'],
+            ];
         @endphp
         <div>
             <div>
@@ -81,7 +92,7 @@
         </div>
 
         <nav class="mt-5 flex flex-wrap gap-2" aria-label="Filter by status">
-            @foreach (['' => 'All', 'sent' => 'Sent', 'fulfilled' => 'Fulfilled', 'declined' => 'Declined', 'cancelled' => 'Cancelled'] as $status => $label)
+            @foreach (['' => 'All', ...collect($statusStyles)->map(fn ($style) => $style['label'])->all()] as $status => $label)
                 @php
                     $isActive = $activeStatus === $status;
                     $count = $status === '' ? $statusCounts->sum() : ($statusCounts[$status] ?? 0);
@@ -96,7 +107,7 @@
                     ])
                 >
                     @if ($status !== '')
-                        <span @class(['size-2 rounded-full', $isActive ? 'bg-white' : $statusDots[$status]])></span>
+                        <span @class(['size-2 rounded-full', $isActive ? 'bg-white' : $statusStyles[$status]['dot']])></span>
                     @endif
                     {{ $label }}
                     <span @class(['rounded-full px-2 text-xs', 'bg-white/20' => $isActive, 'bg-[#dce9e6]' => ! $isActive])>{{ $count }}</span>
@@ -104,72 +115,187 @@
             @endforeach
         </nav>
 
-        <div class="mt-4 grid gap-3 lg:grid-cols-2">
+        <div class="mt-5 space-y-3">
             @forelse ($purchaseOrders as $purchaseOrder)
                 @php
-                    $statusBadge = [
-                        'sent' => 'bg-[#fff0d5] text-[#a76513]',
-                        'fulfilled' => 'bg-[#d7f0df] text-[#187849]',
-                        'declined' => 'bg-[#f5dcd7] text-[#b84331]',
-                        'cancelled' => 'bg-[#dce9e6] text-[#49665f]',
-                    ][$purchaseOrder->status] ?? 'bg-[#dce9e6] text-[#49665f]';
+                    $statusStyle = $statusStyles[$purchaseOrder->status] ?? ['label' => ucfirst($purchaseOrder->status), 'badge' => 'bg-[#dce9e6] text-[#49665f]'];
+                    $receivedBatch = $purchaseOrder->receivedBatch;
+                    $receivedDifference = $purchaseOrder->receivedDifference();
                 @endphp
-                <article class="bk-tile flex flex-col gap-2 py-3">
-                    <div class="flex items-center justify-between gap-3">
-                        <p class="min-w-0 truncate">
-                            <span class="text-xs font-semibold tracking-wide text-[#8aa39c]">{{ $purchaseOrder->reference() }}</span>
-                            <span class="ml-1.5 font-semibold text-[#1c2e28]">{{ $purchaseOrder->supplier_name }}</span>
-                        </p>
-                        <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $statusBadge }}">{{ ucfirst($purchaseOrder->status) }}</span>
+                <article @class(['bk-tile', 'opacity-70' => $purchaseOrder->status === 'cancelled'])>
+                    {{-- Header: reference and supplier, what was ordered, and the status on the right --}}
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <p class="text-xs font-semibold tracking-wide text-[#8aa39c]">{{ $purchaseOrder->reference() }} · {{ $purchaseOrder->supplier_name }}</p>
+                            <h3 class="mt-0.5 text-lg font-semibold text-[#1c2e28]">{{ $purchaseOrder->items->map(fn ($item) => $item->quantity.' × '.$item->flower_type)->join(', ') }}</h3>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap justify-end gap-1.5">
+                            @if ($receivedDifference)
+                                <span @class(['rounded-full px-2.5 py-0.5 text-xs font-semibold', 'bg-[#f5dcd7] text-[#b84331]' => $receivedDifference < 0, 'bg-[#edf7f5] text-[#285443]' => $receivedDifference > 0])>
+                                    {{ abs($receivedDifference) }} {{ $receivedDifference < 0 ? 'short' : 'extra' }}
+                                </span>
+                            @endif
+                            <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $statusStyle['badge'] }}">{{ $statusStyle['label'] }}</span>
+                        </div>
                     </div>
 
-                    <div class="flex items-end justify-between gap-3">
-                        <div class="min-w-0 text-sm">
-                            <p class="font-medium text-[#1c2e28]">{{ $purchaseOrder->items->map(fn ($item) => $item->quantity.' × '.$item->flower_type)->join(', ') }}</p>
-                            <p class="text-xs text-[#607a72]">
-                                For {{ $purchaseOrder->requested_date->format('d M Y') }} · by {{ $purchaseOrder->creator->name }}
-                                @if ($purchaseOrder->fulfilled_at)
-                                    · <span class="text-[#187849]">fulfilled {{ $purchaseOrder->fulfilled_at->timezone('Asia/Kuala_Lumpur')->format('d M Y') }}</span>
-                                @endif
-                            </p>
+                    <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
+                        <div>
+                            <dt class="text-xs text-[#8aa39c]">Requested date</dt>
+                            <dd class="font-medium text-[#1c2e28]">{{ $purchaseOrder->requested_date->format('d M Y') }}</dd>
                         </div>
-                        <div class="flex shrink-0 items-center gap-2">
-                        @can('edit-purchase-order', $purchaseOrder)
-                            <button type="button" onclick="document.getElementById('edit-po-{{ $purchaseOrder->id }}').showModal()" class="bk-btn bk-btn-secondary bk-btn-sm h-8">
-                                <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.59 3.59a2 2 0 0 1 2.82 2.82l-8.6 8.6a2 2 0 0 1-.9.52l-3.12.89a.5.5 0 0 1-.62-.62l.89-3.12a2 2 0 0 1 .52-.9l8.6-8.6Z" /></svg>
-                                Edit
-                            </button>
-                        @endcan
-                        @if ($purchaseOrder->isLocked())
-                            <span class="inline-flex h-8 shrink-0 items-center gap-1 text-xs font-semibold text-[#8aa39c]" title="Fulfilled orders have been delivered and can't be changed">
-                                <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" /></svg>
-                                Locked
-                            </span>
-                        @elseif (auth()->user()->can('update-purchase-order', $purchaseOrder))
-                            <form method="POST" action="{{ route($area.'.purchase-orders.status', $purchaseOrder) }}" class="shrink-0">
-                                @csrf
-                                @method('PATCH')
-                                <label class="sr-only" for="po-status-{{ $purchaseOrder->id }}">Status</label>
-                                <select id="po-status-{{ $purchaseOrder->id }}" name="status" onchange="this.form.submit()" class="bk-input bk-input-sm h-8 w-28 cursor-pointer py-1 text-[#285443]">
-                                    @if ($purchaseOrder->status === 'declined')
-                                        <option value="declined" selected disabled>Declined</option>
-                                    @endif
-                                    <option value="sent" @selected($purchaseOrder->status === 'sent')>{{ $purchaseOrder->status === 'declined' ? 'Re-send' : 'Sent' }}</option>
-                                    <option value="cancelled" @selected($purchaseOrder->status === 'cancelled')>Cancelled</option>
-                                </select>
-                            </form>
-                        @endif
+                        <div>
+                            <dt class="text-xs text-[#8aa39c]">Created</dt>
+                            <dd class="font-medium text-[#1c2e28]">{{ $purchaseOrder->created_at->timezone('Asia/Kuala_Lumpur')->format('d M Y') }} <span class="font-normal text-[#607a72]">by {{ $purchaseOrder->creator->name }}</span></dd>
                         </div>
-                    </div>
+                        <div>
+                            <dt class="text-xs text-[#8aa39c]">Fulfilled</dt>
+                            <dd class="font-medium text-[#1c2e28]">{{ $purchaseOrder->fulfilled_at?->timezone('Asia/Kuala_Lumpur')->format('d M Y') ?? '—' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs text-[#8aa39c]">Received into stock</dt>
+                            <dd class="font-medium text-[#1c2e28]">{{ $receivedBatch ? $purchaseOrder->received_quantity.' of '.$purchaseOrder->orderedQuantity().' on '.$receivedBatch->date_received->format('d M Y') : '—' }}</dd>
+                        </div>
+                    </dl>
 
                     @if ($purchaseOrder->notes)
-                        <p class="rounded-lg bg-[#fdf6ea] px-3 py-1.5 text-xs text-[#7a5a2b]"><span class="font-semibold">Note to supplier:</span> {{ $purchaseOrder->notes }}</p>
+                        <p class="mt-3 rounded-lg bg-[#fdf6ea] px-3 py-2 text-sm text-[#7a5a2b]"><span class="font-semibold">Note to supplier:</span> {{ $purchaseOrder->notes }}</p>
                     @endif
                     @if ($purchaseOrder->supplier_note)
-                        <p @class(['rounded-lg px-3 py-1.5 text-xs', 'bg-[#fbeae7] text-[#b84331]' => $purchaseOrder->status === 'declined', 'bg-[#edf7f5] text-[#285443]' => $purchaseOrder->status !== 'declined'])>
+                        <p @class(['mt-2 rounded-lg px-3 py-2 text-sm', 'bg-[#fbeae7] text-[#b84331]' => $purchaseOrder->status === 'declined', 'bg-[#edf7f5] text-[#285443]' => $purchaseOrder->status !== 'declined'])>
                             <span class="font-semibold">Supplier {{ $purchaseOrder->status === 'declined' ? 'declined' : 'replied' }}:</span> {{ $purchaseOrder->supplier_note }}
                         </p>
                     @endif
+
+                    {{-- Footer: what happens next on the left, actions on the right --}}
+                    <div class="mt-4 flex flex-col gap-3 border-t border-[#e3eeeb] pt-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p class="text-xs">
+                            @if ($receivedBatch)
+                                <span @class(['font-semibold', 'text-[#b84331]' => $receivedDifference < 0, 'text-[#187849]' => $receivedDifference >= 0])>
+                                    Received into stock: {{ $purchaseOrder->received_quantity }} {{ $receivedBatch->flower_type }}{{ $receivedDifference ? ' ('.abs($receivedDifference).' '.($receivedDifference < 0 ? 'short' : 'extra').')' : '' }}.
+                                </span>
+                                <a href="{{ route($area.'.inventory', ['search' => $receivedBatch->flower_type]) }}" class="ml-1 font-semibold text-[#285443] underline underline-offset-2">View in inventory</a>
+                            @else
+                                <span @class(['font-semibold text-[#a76513]' => $purchaseOrder->status === 'fulfilled', 'text-[#607a72]' => $purchaseOrder->status !== 'fulfilled'])>
+                                    {{ match ($purchaseOrder->status) {
+                                        'sent' => 'Waiting for the supplier to fulfil or decline.',
+                                        'fulfilled' => 'Delivered by the supplier. Check what arrived, then receive it into stock.',
+                                        'declined' => 'Declined by the supplier. Edit the order or re-send it.',
+                                        default => 'This purchase order was cancelled.',
+                                    } }}
+                                </span>
+                            @endif
+                        </p>
+                        <div class="flex flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+                            @can('edit-purchase-order', $purchaseOrder)
+                                <button type="button" onclick="document.getElementById('edit-po-{{ $purchaseOrder->id }}').showModal()" class="bk-btn bk-btn-secondary bk-btn-sm h-8">
+                                    <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.59 3.59a2 2 0 0 1 2.82 2.82l-8.6 8.6a2 2 0 0 1-.9.52l-3.12.89a.5.5 0 0 1-.62-.62l.89-3.12a2 2 0 0 1 .52-.9l8.6-8.6Z" /></svg>
+                                    Edit
+                                </button>
+                            @endcan
+                            @can('receive-purchase-order', $purchaseOrder)
+                                <button type="button" onclick="document.getElementById('receive-po-{{ $purchaseOrder->id }}').showModal()" class="bk-btn bk-btn-primary bk-btn-sm h-8">
+                                    <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
+                                    Receive into stock
+                                </button>
+                            @elseif ($purchaseOrder->isLocked())
+                                <span class="inline-flex h-8 shrink-0 items-center gap-1 text-xs font-semibold text-[#8aa39c]" title="Fulfilled orders have been delivered and can't be changed">
+                                    <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" /></svg>
+                                    Locked
+                                </span>
+                            @elseif (auth()->user()->can('update-purchase-order', $purchaseOrder))
+                                <form method="POST" action="{{ route($area.'.purchase-orders.status', $purchaseOrder) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <label class="sr-only" for="po-status-{{ $purchaseOrder->id }}">Status</label>
+                                    <select id="po-status-{{ $purchaseOrder->id }}" name="status" onchange="this.form.submit()" class="bk-input bk-input-sm h-8 w-28 cursor-pointer py-1 text-[#285443]">
+                                        @if ($purchaseOrder->status === 'declined')
+                                            <option value="declined" selected disabled>Declined</option>
+                                        @endif
+                                        <option value="sent" @selected($purchaseOrder->status === 'sent')>{{ $purchaseOrder->status === 'declined' ? 'Re-send' : 'Sent' }}</option>
+                                        <option value="cancelled" @selected($purchaseOrder->status === 'cancelled')>Cancelled</option>
+                                    </select>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+                    @can('receive-purchase-order', $purchaseOrder)
+                        @php
+                            $isFailedReceive = $failedReceiveId === $purchaseOrder->id;
+                            $orderedItem = $purchaseOrder->items->first();
+                            $lastBatch = $latestBatches[strtolower((string) $orderedItem?->flower_type)] ?? null;
+                            $receiveValue = fn (string $key, mixed $default): mixed => $isFailedReceive ? old($key) : $default;
+                        @endphp
+                        <dialog
+                            id="receive-po-{{ $purchaseOrder->id }}"
+                            aria-labelledby="receive-po-title-{{ $purchaseOrder->id }}"
+                            @if ($isFailedReceive) data-open-on-load @endif
+                            class="fixed left-1/2 top-1/2 m-0 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[24px] bg-white p-0 backdrop:bg-[#1c2e28]/40"
+                        >
+                            <form method="POST" action="{{ route($area.'.purchase-orders.receive', $purchaseOrder) }}" class="max-h-[calc(100vh-2rem)] overflow-y-auto p-6 sm:p-8">
+                                @csrf
+                                <input type="hidden" name="receiving_purchase_order" value="{{ $purchaseOrder->id }}">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <h3 id="receive-po-title-{{ $purchaseOrder->id }}" class="font-serif text-xl font-bold text-[#1c2e28]">Receive {{ $purchaseOrder->reference() }}</h3>
+                                        <p class="mt-1 text-sm text-[#607a72]">Adds a new stock batch from {{ $purchaseOrder->supplier_name }}. Enter what actually arrived.</p>
+                                    </div>
+                                    <button type="button" aria-label="Close receive dialog" class="cursor-pointer rounded-full p-1.5 text-[#607a72] hover:bg-[#edf7f5]" onclick="this.closest('dialog').close()">&#10005;</button>
+                                </div>
+                                @if ($isFailedReceive && $errors->any())
+                                    <ul class="mt-4 list-inside list-disc rounded-xl bg-[#f5dcd7] px-4 py-2 text-sm text-[#b84331]">
+                                        @foreach ($errors->all() as $error)
+                                            <li>{{ $error }}</li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                                @if ($lastBatch)
+                                    <p class="mt-4 rounded-xl bg-[#edf7f5] px-3 py-2 text-xs text-[#285443]">Prices, shelf life, and threshold are copied from the last {{ $lastBatch->flower_type }} batch (received {{ $lastBatch->date_received->format('d M Y') }}).</p>
+                                @else
+                                    <p class="mt-4 rounded-xl bg-[#fff0d5] px-3 py-2 text-xs text-[#a76513]">This is the first {{ $orderedItem?->flower_type }} delivery, so enter its prices and shelf life.</p>
+                                @endif
+                                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                                    <label class="bk-label">
+                                        Flower type
+                                        <input name="flower_type" value="{{ $receiveValue('flower_type', $orderedItem?->flower_type) }}" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label">
+                                        <span>Quantity received <span class="font-normal text-[#8aa39c]">({{ $orderedItem?->quantity }} ordered)</span></span>
+                                        <input name="quantity" value="{{ $receiveValue('quantity', $orderedItem?->quantity) }}" type="number" min="1" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label">
+                                        Selling price (RM)
+                                        <input name="unit_price" value="{{ $receiveValue('unit_price', $lastBatch?->unit_price) }}" type="number" min="0" step="0.01" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label">
+                                        Cost price (RM)
+                                        <input name="cost_price" value="{{ $receiveValue('cost_price', $lastBatch?->cost_price) }}" type="number" min="0" step="0.01" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label">
+                                        Date received
+                                        <input name="date_received" value="{{ $receiveValue('date_received', today()->format('Y-m-d')) }}" type="date" max="{{ today()->format('Y-m-d') }}" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label">
+                                        Shelf life (days)
+                                        <input name="shelf_life_days" value="{{ $receiveValue('shelf_life_days', $lastBatch?->shelf_life_days) }}" type="number" min="1" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label">
+                                        Low-stock threshold
+                                        <input name="low_stock_threshold" value="{{ $receiveValue('low_stock_threshold', $lastBatch?->low_stock_threshold) }}" type="number" min="0" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label sm:col-span-2">
+                                        <span>Notes <span class="font-normal text-[#8aa39c]">(optional)</span></span>
+                                        <input name="notes" value="{{ $receiveValue('notes', null) }}" maxlength="1000" placeholder="e.g. 2 stems short" class="bk-input">
+                                    </label>
+                                </div>
+                                <p class="mt-3 text-xs text-[#607a72]">If some flowers arrived with a problem, receive them all, then send those back from Stock returns.</p>
+                                <div class="mt-6 flex justify-end gap-2">
+                                    <button type="button" class="bk-btn bk-btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                                    <button class="bk-btn bk-btn-primary">Add to stock</button>
+                                </div>
+                            </form>
+                        </dialog>
+                    @endcan
                     @can('edit-purchase-order', $purchaseOrder)
                         @php
                             $isFailedEdit = $failedEditId === $purchaseOrder->id;
@@ -237,7 +363,7 @@
                     @endcan
                 </article>
             @empty
-                <p class="bk-tile text-sm text-[#607a72] lg:col-span-2">{{ $isFiltered || $activeStatus !== '' ? 'No purchase orders match the current filters.' : 'No purchase orders have been created yet.' }}</p>
+                <p class="bk-tile text-sm text-[#607a72]">{{ $isFiltered || $activeStatus !== '' ? 'No purchase orders match the current filters.' : 'No purchase orders have been created yet.' }}</p>
             @endforelse
         </div>
     </section>

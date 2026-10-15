@@ -10,7 +10,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-#[Fillable(['flower_type', 'quantity', 'unit_price', 'cost_price', 'date_received', 'shelf_life_days', 'low_stock_threshold', 'supplier_id', 'notes'])]
+#[Fillable(['flower_type', 'quantity', 'unit_price', 'cost_price', 'date_received', 'shelf_life_days', 'low_stock_threshold', 'supplier_id', 'purchase_order_id', 'notes'])]
 class InventoryItem extends Model
 {
     public const WASTAGE_REASONS = ['expired', 'damaged', 'other'];
@@ -27,6 +27,44 @@ class InventoryItem extends Model
     public function canBeDeleted(): bool
     {
         return ! ($this->adjustments_exists ?? $this->adjustments()->exists());
+    }
+
+    /**
+     * Purchase order form values for restocking this flower from the same supplier. The quantity is
+     * left for the person ordering to decide.
+     *
+     * @return array{flower: string, supplier: ?int}
+     */
+    public function reorderQuery(): array
+    {
+        return ['flower' => $this->flower_type, 'supplier' => $this->supplier_id];
+    }
+
+    public function isWithinReturnWindow(): bool
+    {
+        return $this->date_received->gte(today()->subDays(StockReturn::RETURN_WINDOW_DAYS));
+    }
+
+    /**
+     * Only flowers from a known supplier, still in stock, and recently arrived can be sent back.
+     */
+    public function canBeReturned(): bool
+    {
+        return $this->supplier_id !== null && $this->quantity > 0 && $this->isWithinReturnWindow();
+    }
+
+    /**
+     * An emptied batch with history stays empty: new flowers are a new delivery, so they get a new batch
+     * with their own date, cost, and spoil-by date instead of being topped up here.
+     */
+    public function isClosedEmpty(): bool
+    {
+        return $this->quantity === 0 && ! $this->canBeDeleted();
+    }
+
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrder::class);
     }
 
     public function supplier(): BelongsTo

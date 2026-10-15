@@ -1,6 +1,9 @@
 @php
     // Admins and staff share this page; links and forms stay inside the viewer's own area.
     $area = auth()->user()->can('manage-users') ? 'admin' : 'staff';
+    // Sold-out batches stay for their history but are hidden unless asked for.
+    $showEmpty = request()->boolean('show_empty');
+    $emptyBatchCount = $flowerGroups->sum(fn ($group) => $group['batches']->where('quantity', 0)->count());
 @endphp
 
 <x-workspace.layout
@@ -67,8 +70,12 @@
                     <input name="search" value="{{ request('search') }}" placeholder="Search flower" class="bk-input w-56">
                     <button class="bk-btn bk-btn-primary">Search</button>
                     @if (request()->filled('search'))
-                        <a href="{{ route($area.'.inventory', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
+                        <a href="{{ route($area.'.inventory', array_filter(['sort' => $sort, 'direction' => $direction, 'show_empty' => $showEmpty ? 1 : null])) }}" class="bk-btn bk-btn-ghost">Clear</a>
                     @endif
+                    <label class="flex cursor-pointer items-center gap-2 px-1 text-sm text-[#49665f]">
+                        <input type="checkbox" name="show_empty" value="1" @checked($showEmpty) onchange="this.form.submit()" class="size-4 cursor-pointer accent-[#285443]">
+                        Show empty batches ({{ $emptyBatchCount }})
+                    </label>
                 </form>
             </div>
             <div class="flex flex-wrap gap-2 text-xs font-semibold">
@@ -82,77 +89,169 @@
         </div>
 
         <div class="mt-5 overflow-x-auto">
-            <table class="w-full min-w-[920px] text-left text-sm">
+            <table class="w-full min-w-[900px] text-left text-sm">
                 <thead class="border-b border-[#d4e4e0] text-xs uppercase tracking-wider text-[#607a72]">
                     <tr>
                         <x-admin.sort-header column="flower_type" :sort="$sort" :direction="$direction" class="px-3">Flower</x-admin.sort-header>
-                        <x-admin.sort-header column="quantity" :sort="$sort" :direction="$direction" class="px-3">Quantity</x-admin.sort-header>
+                        <x-admin.sort-header column="quantity" :sort="$sort" :direction="$direction" class="px-3">In stock</x-admin.sort-header>
                         <th class="px-3 pb-3">Selling price</th>
                         <th class="px-3 pb-3">Margin</th>
                         <x-admin.sort-header column="date_received" :sort="$sort" :direction="$direction" default-direction="desc" class="px-3">Received</x-admin.sort-header>
                         <x-admin.sort-header column="spoilage_date" :sort="$sort" :direction="$direction" class="px-3">Spoil-by</x-admin.sort-header>
-                        <th class="px-3 pb-3 text-right">Actions</th>
+                        <th class="px-3 pb-3 text-right">Batches</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-[#dce9e6]">
-                    @forelse ($inventory as $item)
-                        @php
-                            $spoilageDate = $item->spoilageDate();
-                            $isNearSpoilage = $spoilageDate->lte(now()->addDays(2));
-                            $daysLeft = (int) today()->diffInDays($spoilageDate, false);
-                            $margin = (float) $item->unit_price - (float) $item->cost_price;
-                            $isLowStock = $item->quantity <= $item->low_stock_threshold;
-                        @endphp
-                        <tr class="align-top">
+                @forelse ($flowerGroups as $groupIndex => $group)
+                    @php
+                        $stockedBatches = $group['batches']->filter(fn ($batch) => $batch->quantity > 0);
+                        $hasSpoilageAlert = $stockedBatches->contains(fn ($batch) => $batch->spoilageDate()->lte(now()->addDays(2)));
+                        $isOutOfStock = $group['total'] === 0;
+                        // Price and margin come from batches in stock, so an old sold-out batch can't skew them.
+                        $pricedBatches = $isOutOfStock ? $group['batches'] : $stockedBatches;
+                        $prices = $pricedBatches->pluck('unit_price')->map(fn ($price) => (float) $price)->unique()->sort()->values();
+                        $margins = $pricedBatches->map(fn ($batch) => round((float) $batch->unit_price - (float) $batch->cost_price, 2))->unique()->sort()->values();
+                        $visibleBatches = $showEmpty ? $group['batches'] : $stockedBatches->values();
+                        // Batch rows repeat pricing only when it differs between the batches shown; otherwise the flower row already says it.
+                        $showBatchPricing = $visibleBatches->map(fn ($batch) => $batch->unit_price.'|'.$batch->cost_price)->unique()->count() > 1;
+                        $groupDaysLeft = (int) today()->diffInDays($group['earliest_spoilage'], false);
+                        $batchCount = $visibleBatches->count();
+                    @endphp
+                    <tbody class="border-b border-[#dce9e6]">
+                        {{-- Summary row: the flower at a glance --}}
+                        <tr class="align-middle">
                             <td class="px-3 py-4">
-                                <span class="font-semibold text-[#1c2e28]">{{ $item->flower_type }}</span>
-                                <span class="mt-0.5 block text-xs text-[#607a72]">{{ $item->supplier?->name ?? 'No supplier' }}</span>
-                                @if ($item->notes)
-                                    <span class="mt-0.5 block max-w-48 truncate text-xs text-[#8aa39c]" title="{{ $item->notes }}">{{ $item->notes }}</span>
+                                <span class="font-semibold text-[#1c2e28]">{{ $group['flower_type'] }}</span>
+                                @if ($group['is_low_stock'] || $hasSpoilageAlert)
+                                    <div class="mt-1.5 flex flex-wrap gap-1.5">
+                                        @if ($isOutOfStock)
+                                            <span class="rounded-full bg-[#f5dcd7] px-2 py-0.5 text-xs font-semibold text-[#b84331]">Out of stock</span>
+                                        @elseif ($group['is_low_stock'])
+                                            <span class="rounded-full bg-[#fff0d5] px-2 py-0.5 text-xs font-semibold text-[#a76513]">Low stock</span>
+                                        @endif
+                                        @if ($hasSpoilageAlert)
+                                            <span class="rounded-full bg-[#f5dcd7] px-2 py-0.5 text-xs font-semibold text-[#b84331]">Spoilage alert</span>
+                                        @endif
+                                    </div>
                                 @endif
-                                <div class="mt-1.5 flex flex-wrap gap-1.5">
-                                    @if ($isNearSpoilage)
-                                        <span class="rounded-full bg-[#f5dcd7] px-2 py-0.5 text-xs font-semibold text-[#b84331]">Spoilage alert</span>
-                                    @endif
-                                    @if ($isLowStock)
-                                        <span class="rounded-full bg-[#fff0d5] px-2 py-0.5 text-xs font-semibold text-[#a76513]">Low stock</span>
-                                    @endif
-                                </div>
                             </td>
-                            <td class="px-3 py-4 {{ $isLowStock ? 'font-bold text-[#b84331]' : 'text-[#1c2e28]' }}">
-                                {{ $item->quantity }}
-                            </td>
+                            <td @class(['px-3 py-4 text-base', 'font-bold text-[#b84331]' => $group['is_low_stock'], 'font-semibold text-[#1c2e28]' => ! $group['is_low_stock']])>{{ $group['total'] }}</td>
                             <td class="whitespace-nowrap px-3 py-4 text-[#1c2e28]">
-                                RM {{ number_format($item->unit_price, 2) }}
-                                <span class="block text-xs text-[#8aa39c]">cost RM {{ number_format($item->cost_price, 2) }}</span>
+                                RM {{ number_format($prices->first(), 2) }}{{ $prices->count() > 1 ? ' – '.number_format($prices->last(), 2) : '' }}
                             </td>
-                            <td class="whitespace-nowrap px-3 py-4 font-semibold {{ $margin < 0 ? 'text-[#b84331]' : 'text-[#187849]' }}">RM {{ number_format($margin, 2) }}</td>
-                            <td class="whitespace-nowrap px-3 py-4 text-[#607a72]">{{ $item->date_received->format('d M Y') }}</td>
+                            <td @class(['whitespace-nowrap px-3 py-4 font-semibold', 'text-[#b84331]' => $margins->first() < 0, 'text-[#187849]' => $margins->first() >= 0])>
+                                RM {{ number_format($margins->first(), 2) }}{{ $margins->count() > 1 ? ' – '.number_format($margins->last(), 2) : '' }}
+                            </td>
+                            <td class="whitespace-nowrap px-3 py-4 text-[#607a72]">{{ $group['latest_received']->format('d M Y') }}</td>
                             <td class="whitespace-nowrap px-3 py-4 text-[#607a72]">
-                                {{ $spoilageDate->format('d M Y') }}
-                                <span @class(['block text-xs', 'font-semibold text-[#b84331]' => $daysLeft <= 2])>
-                                    {{ $daysLeft < 0 ? abs($daysLeft).' '.Str::plural('day', abs($daysLeft)).' overdue' : ($daysLeft === 0 ? 'Spoils today' : $daysLeft.' '.Str::plural('day', $daysLeft).' left') }}
-                                </span>
+                                @if ($isOutOfStock)
+                                    —
+                                @else
+                                    {{ $group['earliest_spoilage']->format('d M Y') }}
+                                    <span @class(['block text-xs', 'font-semibold text-[#b84331]' => $groupDaysLeft <= 2])>
+                                        {{ $groupDaysLeft < 0 ? abs($groupDaysLeft).' '.Str::plural('day', abs($groupDaysLeft)).' overdue' : ($groupDaysLeft === 0 ? 'Spoils today' : $groupDaysLeft.' '.Str::plural('day', $groupDaysLeft).' left') }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="px-3 py-4 text-right">
-                                <div class="flex justify-end gap-3 whitespace-nowrap text-xs font-semibold">
-                                    <button
-                                        type="button"
-                                        class="cursor-pointer text-[#285443] underline underline-offset-2"
-                                        onclick="document.getElementById('edit-stock-{{ $item->id }}').showModal()"
-                                    >Edit</button>
-                                    <a href="{{ route('staff.wastage.create', ['item' => $item->id]) }}" class="text-[#a76513] underline underline-offset-2">Wastage</a>
-                                    @if ($item->canBeDeleted())
-                                        <form method="POST" action="{{ route($area.'.inventory.destroy', $item) }}" onsubmit="return confirm(@js("Delete {$item->flower_type}? This cannot be undone."))">
-                                            @csrf @method('DELETE')
-                                            <button class="cursor-pointer text-[#b84331] underline underline-offset-2" type="submit">Delete</button>
-                                        </form>
-                                    @else
-                                        <span class="cursor-not-allowed text-[#a9bcb6]" title="Has stock history (wastage, order stock, or adjustments), so it can't be deleted. Set its quantity to 0 instead.">Delete</span>
-                                    @endif
+                                <div class="flex flex-wrap items-center justify-end gap-2">
+                                @if ($group['is_low_stock'])
+                                    <a href="{{ route($area.'.purchase-orders', $group['reorder_query']) }}#create-purchase-order" class="bk-btn bk-btn-accent bk-btn-sm h-8">Reorder</a>
+                                @endif
+                                @if ($batchCount === 0)
+                                    <span class="text-xs text-[#8aa39c]">No batches in stock</span>
+                                @else
+                                <button
+                                    type="button"
+                                    class="bk-btn bk-btn-secondary bk-btn-sm h-8"
+                                    aria-expanded="false"
+                                    aria-controls="batches-{{ $groupIndex }}"
+                                    onclick="const open = this.getAttribute('aria-expanded') !== 'true'; this.setAttribute('aria-expanded', open); this.querySelector('svg').classList.toggle('rotate-180', open); this.closest('tbody').querySelectorAll('[data-batch-row]').forEach((row) => row.hidden = ! open)"
+                                >
+                                    {{ $batchCount }} {{ Str::plural('batch', $batchCount) }}
+                                    <svg class="size-3.5 transition" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+                                </button>
+                                @endif
                                 </div>
                             </td>
                         </tr>
+
+                        {{-- Batch rows: hidden until opened --}}
+                        @foreach ($visibleBatches as $item)
+                            @php
+                                $spoilageDate = $item->spoilageDate();
+                                $daysLeft = (int) today()->diffInDays($spoilageDate, false);
+                                $margin = (float) $item->unit_price - (float) $item->cost_price;
+                            @endphp
+                            <tr data-batch-row @if ($loop->first) id="batches-{{ $groupIndex }}" @endif hidden @class(['bg-[#f4faf8] align-top text-[13px]', 'opacity-60' => $item->quantity === 0])>
+                                <td class="py-3 pr-3 pl-6">
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <span class="font-semibold text-[#1c2e28]">Batch #{{ $item->id }}</span>
+                                        @if ($group['sell_first_id'] === $item->id)
+                                            <span class="rounded-full bg-[#285443] px-2 py-0.5 text-xs font-semibold text-white" title="Customer orders take from this batch first because it spoils soonest">Sell first</span>
+                                        @endif
+                                    </div>
+                                    <span class="mt-0.5 block text-xs text-[#607a72]">
+                                        {{ $item->supplier?->name ?? 'No supplier' }} ·
+                                        @if ($item->purchaseOrder)
+                                            from {{ $item->purchaseOrder->reference() }}
+                                        @else
+                                            added manually
+                                        @endif
+                                    </span>
+                                    @if ($item->notes)
+                                        <span class="mt-0.5 block max-w-48 truncate text-xs text-[#8aa39c]" title="{{ $item->notes }}">{{ $item->notes }}</span>
+                                    @endif
+                                </td>
+                                <td class="px-3 py-3 text-[#1c2e28]">{{ $item->quantity }}</td>
+                                @if ($showBatchPricing)
+                                    <td class="whitespace-nowrap px-3 py-3 text-[#1c2e28]">
+                                        RM {{ number_format($item->unit_price, 2) }}
+                                        <span class="block text-xs text-[#8aa39c]">cost RM {{ number_format($item->cost_price, 2) }}</span>
+                                    </td>
+                                    <td class="whitespace-nowrap px-3 py-3 font-semibold {{ $margin < 0 ? 'text-[#b84331]' : 'text-[#187849]' }}">RM {{ number_format($margin, 2) }}</td>
+                                @else
+                                    <td class="px-3 py-3"></td>
+                                    <td class="px-3 py-3"></td>
+                                @endif
+                                <td class="whitespace-nowrap px-3 py-3 text-[#607a72]">
+                                    {{ $item->date_received->format('d M Y') }}
+                                    <span class="block text-xs text-[#8aa39c]">added {{ $item->created_at->timezone('Asia/Kuala_Lumpur')->format('d M, h:i A') }}</span>
+                                </td>
+                                <td class="whitespace-nowrap px-3 py-3 text-[#607a72]">
+                                    {{ $spoilageDate->format('d M Y') }}
+                                    <span @class(['block text-xs', 'font-semibold text-[#b84331]' => $daysLeft <= 2 && $item->quantity > 0])>
+                                        {{ $daysLeft < 0 ? abs($daysLeft).' '.Str::plural('day', abs($daysLeft)).' overdue' : ($daysLeft === 0 ? 'Spoils today' : $daysLeft.' '.Str::plural('day', $daysLeft).' left') }}
+                                    </span>
+                                </td>
+                                <td class="px-3 py-3 text-right">
+                                    <div class="flex justify-end gap-3 whitespace-nowrap text-xs font-semibold">
+                                        @if ($item->quantity === 0)
+                                            {{-- Sold out: nothing left to edit, waste, or delete; the batch is kept for its history. --}}
+                                            @foreach (['Edit', 'Wastage', 'Delete'] as $disabledAction)
+                                                <span class="cursor-not-allowed text-[#a9bcb6]" title="This batch is empty.">{{ $disabledAction }}</span>
+                                            @endforeach
+                                        @else
+                                        <button
+                                            type="button"
+                                            class="cursor-pointer text-[#285443] underline underline-offset-2"
+                                            onclick="document.getElementById('edit-stock-{{ $item->id }}').showModal()"
+                                        >Edit</button>
+                                        <a href="{{ route('staff.wastage.create', ['item' => $item->id]) }}" class="text-[#a76513] underline underline-offset-2">Wastage</a>
+                                        @if ($item->canBeReturned())
+                                            <a href="{{ route($area.'.stock-returns', ['item' => $item->id]) }}" class="text-[#285443] underline underline-offset-2">Return</a>
+                                        @endif
+                                        @if ($item->canBeDeleted())
+                                            <form method="POST" action="{{ route($area.'.inventory.destroy', $item) }}" onsubmit="return confirm(@js("Delete {$item->flower_type}? This cannot be undone."))">
+                                                @csrf @method('DELETE')
+                                                <button class="cursor-pointer text-[#b84331] underline underline-offset-2" type="submit">Delete</button>
+                                            </form>
+                                        @else
+                                            <span class="cursor-not-allowed text-[#a9bcb6]" title="Has stock history (wastage, order stock, or adjustments), so it can't be deleted. Set its quantity to 0 instead.">Delete</span>
+                                        @endif
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
 
                         {{-- Edit item modal --}}
                         <dialog
@@ -177,7 +276,12 @@
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Quantity</span>
-                                            <input name="quantity" type="number" min="0" value="{{ $item->quantity }}" required class="bk-input">
+                                            @if ($item->isClosedEmpty())
+                                                <input name="quantity" type="number" value="0" readonly class="bk-input cursor-not-allowed bg-[#eef3f1] text-[#8aa39c]">
+                                                <span class="text-xs text-[#a76513]">This batch is empty. To add new {{ $item->flower_type }}, use Add stock item or Receive into stock.</span>
+                                            @else
+                                                <input name="quantity" type="number" min="0" value="{{ $item->quantity }}" required class="bk-input">
+                                            @endif
                                         </label>
                                         <label class="grid gap-1 text-sm">
                                             <span class="font-semibold text-[#1c2e28]">Selling price (RM)</span>
@@ -215,11 +319,13 @@
                                 </form>
                             </div>
                         </dialog>
-
-                    @empty
+                        @endforeach
+                    </tbody>
+                @empty
+                    <tbody>
                         <tr><td colspan="7" class="py-8 text-center text-sm text-[#607a72]">{{ request()->filled('search') ? 'No flowers match your search.' : 'No inventory items yet.' }}</td></tr>
-                    @endforelse
-                </tbody>
+                    </tbody>
+                @endforelse
             </table>
         </div>
     </section>

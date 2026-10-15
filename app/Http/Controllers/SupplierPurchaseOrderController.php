@@ -16,7 +16,7 @@ class SupplierPurchaseOrderController extends Controller
         $status = in_array($request->query('status'), PurchaseOrder::STATUSES, true) ? $request->query('status') : null;
 
         return view('supplier.purchase-orders', [
-            'purchaseOrders' => (clone $orders)->with(['items', 'creator'])
+            'purchaseOrders' => (clone $orders)->with(['items', 'creator', 'receivedBatch'])
                 ->when($status, fn ($query) => $query->where('status', $status))
                 ->orderByRaw("CASE WHEN status = 'sent' THEN 0 ELSE 1 END")
                 ->orderBy('requested_date')
