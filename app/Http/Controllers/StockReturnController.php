@@ -39,7 +39,7 @@ class StockReturnController extends Controller
             'reason' => ['required', Rule::in(array_keys(StockReturn::REASONS))],
             'notes' => ['nullable', 'string', 'max:1000'],
         ], [
-            'inventory_item_id.required' => 'Choose which flowers to send back.',
+            'inventory_item_id.required' => 'Please select a stock batch.',
         ]);
 
         $stockReturn = StockReturn::request(
@@ -50,13 +50,13 @@ class StockReturnController extends Controller
             $data['notes'] ?? null,
         );
 
-        return back()->with('status', "{$stockReturn->reference()} sent to {$stockReturn->supplier->name}. The flowers have been taken out of your stock.");
+        return back()->with('status', "Return {$stockReturn->reference()} submitted to {$stockReturn->supplier->name}. Stock has been deducted.");
     }
 
     public function cancel(StockReturn $stockReturn): RedirectResponse
     {
         $stockReturn->cancel();
 
-        return back()->with('status', "{$stockReturn->reference()} cancelled. The flowers are back in your stock.");
+        return back()->with('status', "Return {$stockReturn->reference()} cancelled. Stock has been restored.");
     }
 }

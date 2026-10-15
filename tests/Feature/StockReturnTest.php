@@ -38,11 +38,11 @@ test('admins and staff can return stock, which leaves stock straight away', func
 })->with(['staff', 'admin']);
 
 test('a return cannot exceed the stock on hand or come from a batch without a supplier', function () {
-    sendReturn($this->staff, ['quantity' => 21])->assertSessionHasErrors(['quantity' => "You only have 20 Roses left, so you can't send back 21."]);
+    sendReturn($this->staff, ['quantity' => 21])->assertSessionHasErrors(['quantity' => 'Only 20 Roses in stock. Unable to return 21.']);
 
     $noSupplier = InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 10, 'unit_price' => 1.80, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
     sendReturn($this->staff, ['inventory_item_id' => $noSupplier->id])
-        ->assertSessionHasErrors(['inventory_item_id' => "We don't know who supplied these Tulips, so they can't be sent back. Record them as wastage instead."]);
+        ->assertSessionHasErrors(['inventory_item_id' => 'This Tulips batch has no recorded supplier and cannot be returned. Record it as wastage instead.']);
 
     expect(StockReturn::count())->toBe(0)
         ->and($this->roses->refresh()->quantity)->toBe(20);
@@ -158,7 +158,7 @@ test('flowers can only be returned within the return window after arriving', fun
 
     $allowed
         ? $response->assertSessionHasNoErrors()
-        : $response->assertSessionHasErrors(['inventory_item_id' => 'These Roses arrived on '.today()->subDays($daysAgo)->format('d M Y').'. Flowers can only be sent back within 2 days of arriving, so record them as wastage instead.']);
+        : $response->assertSessionHasErrors(['inventory_item_id' => 'This Roses batch was received on '.today()->subDays($daysAgo)->format('d M Y').'. Returns are accepted within 2 days of receipt. Record it as wastage instead.']);
 
     expect($this->roses->refresh()->quantity)->toBe($allowed ? 15 : 20);
 })->with([

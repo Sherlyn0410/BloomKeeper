@@ -29,7 +29,7 @@ class StockReturn extends Model
     /**
      * @var array<string, string>
      */
-    public const REASONS = ['damaged' => 'Damaged', 'poor_quality' => 'Poor quality', 'wrong_item' => 'Wrong flowers sent', 'other' => 'Other'];
+    public const REASONS = ['damaged' => 'Damaged', 'poor_quality' => 'Poor quality', 'wrong_item' => 'Incorrect item', 'other' => 'Other'];
 
     /**
      * Take the flowers out of stock straight away so they cannot be sold while the supplier decides.
@@ -42,15 +42,15 @@ class StockReturn extends Model
             $batch = InventoryItem::query()->with('supplier')->lockForUpdate()->findOrFail($batch->id);
 
             if ($batch->supplier === null) {
-                throw ValidationException::withMessages(['inventory_item_id' => "We don't know who supplied these {$batch->flower_type}, so they can't be sent back. Record them as wastage instead."]);
+                throw ValidationException::withMessages(['inventory_item_id' => "This {$batch->flower_type} batch has no recorded supplier and cannot be returned. Record it as wastage instead."]);
             }
 
             if (! $batch->isWithinReturnWindow()) {
-                throw ValidationException::withMessages(['inventory_item_id' => "These {$batch->flower_type} arrived on {$batch->date_received->format('d M Y')}. Flowers can only be sent back within ".self::RETURN_WINDOW_DAYS.' days of arriving, so record them as wastage instead.']);
+                throw ValidationException::withMessages(['inventory_item_id' => "This {$batch->flower_type} batch was received on {$batch->date_received->format('d M Y')}. Returns are accepted within ".self::RETURN_WINDOW_DAYS.' days of receipt. Record it as wastage instead.']);
             }
 
             if ($quantity > $batch->quantity) {
-                throw ValidationException::withMessages(['quantity' => "You only have {$batch->quantity} {$batch->flower_type} left, so you can't send back {$quantity}."]);
+                throw ValidationException::withMessages(['quantity' => "Only {$batch->quantity} {$batch->flower_type} in stock. Unable to return {$quantity}."]);
             }
 
             $batch->decrement('quantity', $quantity);
