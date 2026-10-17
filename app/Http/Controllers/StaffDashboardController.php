@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
 use App\Models\PurchaseOrder;
+use App\Models\StockReturn;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,7 +43,7 @@ class StaffDashboardController extends Controller
     }
 
     /**
-     * The supplier's open purchase orders and recent deliveries.
+     * The supplier's open purchase orders, recent deliveries, and returns waiting on them.
      *
      * @return array<string, mixed>
      */
@@ -55,6 +56,8 @@ class StaffDashboardController extends Controller
             'duePurchaseOrders' => (clone $orders)->where('status', 'sent')->whereDate('requested_date', '<=', today()->addDays(3))->count(),
             'fulfilledThisMonth' => (clone $orders)->where('status', 'fulfilled')->where('fulfilled_at', '>=', now()->startOfMonth())->count(),
             'upcomingPurchaseOrders' => (clone $orders)->with('items')->where('status', 'sent')->orderBy('requested_date')->limit(5)->get(),
+            'pendingReturnCount' => StockReturn::query()->where('supplier_id', $supplier->id)->where('status', 'requested')->count(),
+            'pendingReturns' => StockReturn::query()->where('supplier_id', $supplier->id)->where('status', 'requested')->oldest()->limit(5)->get(),
         ];
     }
 

@@ -30,11 +30,12 @@
             </div>
         </section>
     @elsecan('supply-orders')
-        <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             @foreach ([
                 ['label' => 'Awaiting you', 'value' => $openPurchaseOrders, 'note' => 'Orders to fulfil or decline', 'tone' => 'text-[#a76513]'],
                 ['label' => 'Due within 3 days', 'value' => $duePurchaseOrders, 'note' => 'Requested soon or overdue', 'tone' => 'text-[#d5533d]'],
                 ['label' => 'Fulfilled this month', 'value' => $fulfilledThisMonth, 'note' => 'Delivered to the shop', 'tone' => 'text-[#1c9b5f]'],
+                ['label' => 'Returns to review', 'value' => $pendingReturnCount, 'note' => 'Returns to accept or reject', 'tone' => 'text-[#b84331]'],
             ] as $stat)
                 <div class="bk-card">
                     <p class="text-sm text-[#49665f]">{{ $stat['label'] }}</p>
@@ -44,32 +45,56 @@
             @endforeach
         </div>
 
-        <section class="bk-card">
-            <div class="flex items-center justify-between gap-4">
-                <div>
-                    <h2 class="bk-card-title">Next to deliver</h2>
-                    <p class="bk-card-subtitle">Open purchase orders, soonest first.</p>
-                </div>
-                <a href="{{ route('supplier.purchase-orders.index') }}" class="text-sm font-semibold text-[#285443] underline underline-offset-4">View all</a>
-            </div>
-            <div class="mt-5 space-y-3">
-                @forelse ($upcomingPurchaseOrders as $purchaseOrder)
-                    <div class="bk-tile flex flex-wrap items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="text-xs font-semibold tracking-wide text-[#8aa39c]">{{ $purchaseOrder->reference() }}</p>
-                            <p class="font-semibold text-[#1c2e28]">{{ $purchaseOrder->items->map(fn ($item) => $item->quantity.' × '.$item->flower_type)->join(', ') }}</p>
-                        </div>
-                        <span @class([
-                            'rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                            'bg-[#f5dcd7] text-[#b84331]' => $purchaseOrder->requested_date->lte(today()->addDays(3)),
-                            'bg-[#edf7f5] text-[#285443]' => $purchaseOrder->requested_date->gt(today()->addDays(3)),
-                        ])>Needed {{ $purchaseOrder->requested_date->format('d M Y') }}</span>
+        <div class="grid gap-6 xl:grid-cols-2">
+            <section class="bk-card">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h2 class="bk-card-title">Next to deliver</h2>
+                        <p class="bk-card-subtitle">Open purchase orders, soonest first.</p>
                     </div>
-                @empty
-                    <p class="bk-tile text-center text-sm text-[#607a72]">No open purchase orders right now.</p>
-                @endforelse
-            </div>
-        </section>
+                    <a href="{{ route('supplier.purchase-orders.index') }}" class="text-sm font-semibold text-[#285443] underline underline-offset-4">View all</a>
+                </div>
+                <div class="mt-5 space-y-3">
+                    @forelse ($upcomingPurchaseOrders as $purchaseOrder)
+                        <div class="bk-tile flex flex-wrap items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-xs font-semibold tracking-wide text-[#8aa39c]">{{ $purchaseOrder->reference() }}</p>
+                                <p class="font-semibold text-[#1c2e28]">{{ $purchaseOrder->items->map(fn ($item) => $item->quantity.' × '.$item->flower_type)->join(', ') }}</p>
+                            </div>
+                            <span @class([
+                                'rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                                'bg-[#f5dcd7] text-[#b84331]' => $purchaseOrder->requested_date->lte(today()->addDays(3)),
+                                'bg-[#edf7f5] text-[#285443]' => $purchaseOrder->requested_date->gt(today()->addDays(3)),
+                            ])>Needed {{ $purchaseOrder->requested_date->format('d M Y') }}</span>
+                        </div>
+                    @empty
+                        <p class="bk-tile text-center text-sm text-[#607a72]">No open purchase orders right now.</p>
+                    @endforelse
+                </div>
+            </section>
+            <section class="bk-card">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h2 class="bk-card-title">Returns to review</h2>
+                        <p class="bk-card-subtitle">Stock the shop is returning, oldest first.</p>
+                    </div>
+                    <a href="{{ route('supplier.stock-returns.index') }}" class="text-sm font-semibold text-[#285443] underline underline-offset-4">View all</a>
+                </div>
+                <div class="mt-5 space-y-3">
+                    @forelse ($pendingReturns as $stockReturn)
+                        <div class="bk-tile flex flex-wrap items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-xs font-semibold tracking-wide text-[#8aa39c]">{{ $stockReturn->reference() }}</p>
+                                <p class="font-semibold text-[#1c2e28]">{{ $stockReturn->quantity }} × {{ $stockReturn->flower_type }}</p>
+                            </div>
+                            <span class="rounded-full bg-[#f5dcd7] px-2.5 py-0.5 text-xs font-semibold text-[#b84331]">{{ $stockReturn->reasonLabel() }}</span>
+                        </div>
+                    @empty
+                        <p class="bk-tile text-center text-sm text-[#607a72]">No returns to review.</p>
+                    @endforelse
+                </div>
+            </section>
+        </div>
     @else
         <section class="bk-card">
             <span class="inline-flex rounded-full bg-[#d6eee9] px-3 py-1 text-sm font-medium capitalize text-[#285443]">{{ auth()->user()->role }} account</span>

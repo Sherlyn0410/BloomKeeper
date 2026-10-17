@@ -3,6 +3,7 @@
 use App\Models\CustomerOrder;
 use App\Models\InventoryItem;
 use App\Models\PurchaseOrder;
+use App\Models\StockReturn;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -72,4 +73,21 @@ test('suppliers see their purchase order summary and no staff tools', function (
         ->assertSee(route('supplier.purchase-orders.index'))
         ->assertDontSee('Collections today')
         ->assertDontSee(route('staff.orders.index'));
+});
+
+test('suppliers see returns waiting for them on the dashboard', function () {
+    $supplier = User::factory()->create(['role' => 'supplier']);
+    $otherSupplier = User::factory()->create(['role' => 'supplier']);
+    $pending = StockReturn::factory()->create(['supplier_id' => $supplier->id, 'quantity' => 4, 'flower_type' => 'Roses', 'reason' => 'damaged']);
+    StockReturn::factory()->accepted()->create(['supplier_id' => $supplier->id, 'flower_type' => 'Lilies']);
+    StockReturn::factory()->create(['supplier_id' => $otherSupplier->id, 'flower_type' => 'Tulips']);
+
+    $this->actingAs($supplier)->get(route('dashboard'))
+        ->assertOk()
+        ->assertSeeInOrder(['Returns to review', '1', 'Returns to accept or reject'])
+        ->assertSee($pending->reference())
+        ->assertSee('4 × Roses')
+        ->assertDontSee('Lilies')
+        ->assertDontSee('Tulips')
+        ->assertSee(route('supplier.stock-returns.index'));
 });
