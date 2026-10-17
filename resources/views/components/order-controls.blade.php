@@ -9,7 +9,7 @@
 <div {{ $attributes->merge(['class' => 'flex flex-col gap-2 border-t border-[#e3eeeb] pt-3 sm:flex-row sm:items-center sm:justify-between']) }}>
     @if ($order->status === 'cancelled')
         <label class="sr-only" for="order-status-{{ $order->id }}">Status</label>
-        <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't be changed. They can only be deleted." class="bk-input bk-input-sm h-8 w-full cursor-not-allowed bg-[#eef3f1] py-1 text-[#8aa39c]">
+        <select id="order-status-{{ $order->id }}" disabled title="Cancelled orders can't be changed. They can only be deleted." class="bk-input bk-input-sm h-8 w-full cursor-not-allowed sm:w-32 bg-[#eef3f1] py-1 text-[#8aa39c]">
             <option>Cancelled</option>
         </select>
     @elseif (! $order->isLocked())

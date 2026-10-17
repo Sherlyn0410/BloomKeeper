@@ -605,3 +605,42 @@ test('a flower with every batch sold out stays listed as out of stock with a reo
         ->assertSeeInOrder(['Lilies', 'Out of stock', '>0</td>', 'No batches in stock'], false)
         ->assertSee('>Reorder</a>', false);
 });
+
+test('the sales report offers daily, weekly, and monthly periods', function () {
+    $this->travelTo(Carbon::parse('2026-10-15 10:00:00', 'Asia/Kuala_Lumpur'));
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->get(route('admin.reports'))
+        ->assertOk()
+        ->assertSee(route('admin.reports', ['from' => '2026-10-15', 'to' => '2026-10-15', 'sort' => 'flower_type', 'direction' => 'asc']))
+        ->assertSee(route('admin.reports', ['from' => '2026-10-12', 'to' => '2026-10-18', 'sort' => 'flower_type', 'direction' => 'asc']))
+        ->assertSee(route('admin.reports', ['from' => '2026-10-01', 'to' => '2026-10-31', 'sort' => 'flower_type', 'direction' => 'asc']));
+
+    $this->actingAs($admin)->get(route('admin.reports', ['from' => '2026-10-12', 'to' => '2026-10-18']))
+        ->assertSeeInOrder(['aria-current="page"', 'Weekly'], false)
+        ->assertSee('12 Oct 2026');
+});
+
+test('the sales report steps back and forward by the chosen period', function (array $current, string $label, array $previous, ?array $next) {
+    $this->travelTo(Carbon::parse('2026-10-15 10:00:00', 'Asia/Kuala_Lumpur'));
+    $admin = User::factory()->create(['role' => 'admin']);
+    $url = fn (array $range): string => route('admin.reports', [...$range, 'sort' => 'flower_type', 'direction' => 'asc']);
+
+    $response = $this->actingAs($admin)->get(route('admin.reports', $current))
+        ->assertSee($label)
+        ->assertSee($url($previous));
+
+    $next ? $response->assertSee($url($next)) : $response->assertDontSee('aria-label="Next period"', false);
+})->with([
+    'previous month' => [['from' => '2026-09-01', 'to' => '2026-09-30'], 'September 2026', ['from' => '2026-08-01', 'to' => '2026-08-31'], ['from' => '2026-10-01', 'to' => '2026-10-31']],
+    'current month' => [['from' => '2026-10-01', 'to' => '2026-10-31'], 'October 2026', ['from' => '2026-09-01', 'to' => '2026-09-30'], null],
+    'week across months' => [['from' => '2026-09-28', 'to' => '2026-10-04'], '28 Sep – 04 Oct 2026', ['from' => '2026-09-21', 'to' => '2026-09-27'], ['from' => '2026-10-05', 'to' => '2026-10-11']],
+    'day' => [['from' => '2026-10-01', 'to' => '2026-10-01'], '01 Oct 2026', ['from' => '2026-09-30', 'to' => '2026-09-30'], ['from' => '2026-10-02', 'to' => '2026-10-02']],
+]);
+
+test('custom date ranges have no period arrows', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->get(route('admin.reports', ['from' => '2026-09-03', 'to' => '2026-09-17']))
+        ->assertDontSee('aria-label="Previous period"', false);
+});
