@@ -17,6 +17,7 @@
             ['label' => 'Customers', 'route' => 'staff.customers.index', 'active' => request()->routeIs('staff.customers.*')],
         ]],
         ['label' => 'Purchase Orders', 'route' => 'admin.purchase-orders', 'active' => request()->routeIs('admin.purchase-orders')],
+        ['label' => 'Messages', 'route' => 'messages.index', 'active' => request()->routeIs('messages.*'), 'badge' => auth()->user()->unreadMessageCount()],
         ['label' => 'Reports', 'children' => [
             ['label' => 'Sales report', 'route' => 'admin.reports', 'active' => request()->routeIs('admin.reports', 'admin.reports.export')],
             ['label' => 'Wastage report', 'route' => 'admin.reports.wastage', 'active' => request()->routeIs('admin.reports.wastage*')],

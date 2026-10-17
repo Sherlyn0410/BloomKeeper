@@ -124,9 +124,20 @@ class AdminOperationsController extends Controller
                 ->get(),
             'statusCounts' => $statusCounts,
             'suppliers' => $this->approvedSuppliers(),
+            'followUpOf' => $this->shortPurchaseOrder($request->integer('follow_up')),
             'latestBatches' => InventoryItem::query()->orderBy('date_received')->orderBy('id')->get()
                 ->keyBy(fn (InventoryItem $item): string => strtolower($item->flower_type)),
         ]);
+    }
+
+    /**
+     * The purchase order being followed up with a re-order, only when its delivery actually arrived short.
+     */
+    private function shortPurchaseOrder(int $purchaseOrderId): ?PurchaseOrder
+    {
+        $purchaseOrder = $purchaseOrderId ? PurchaseOrder::query()->with(['items', 'receivedBatch'])->find($purchaseOrderId) : null;
+
+        return $purchaseOrder?->receivedDifference() < 0 ? $purchaseOrder : null;
     }
 
     public function wastage(Request $request): View

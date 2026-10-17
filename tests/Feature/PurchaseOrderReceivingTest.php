@@ -138,3 +138,31 @@ test('selling flowers from a received batch does not change what the delivery sh
     $this->actingAs($this->supplier)->get(route('supplier.purchase-orders.index'))
         ->assertSee('Shop received 50 of 50');
 });
+
+test('a short delivery offers a pre-filled re-order for the missing flowers', function () {
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.receive', $this->purchaseOrder), receivePayload(['quantity' => 40]));
+    $followUpUrl = route('staff.purchase-orders', ['follow_up' => $this->purchaseOrder->id]);
+
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders'))
+        ->assertSee($followUpUrl.'#create-purchase-order', false)
+        ->assertSee('Re-order missing 10');
+
+    $this->actingAs($this->staff)->get($followUpUrl)
+        ->assertSee('Re-ordering the 10 Roses missing from PO-0001. Please review the details and send.')
+        ->assertSee('<option value="'.$this->supplier->id.'" selected>', false)
+        ->assertSee('name="flower_type" value="Roses"', false)
+        ->assertSee('name="quantity" value="10"', false)
+        ->assertSee('value="Follow-up to PO-0001 (10 short)"', false);
+
+    $this->actingAs($this->supplier)->get(route('supplier.purchase-orders.index'))
+        ->assertSee('The shop may send a follow-up order for the missing flowers.');
+});
+
+test('complete deliveries have no re-order button and cannot be followed up', function () {
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.receive', $this->purchaseOrder), receivePayload(['quantity' => 50]));
+
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders'))->assertDontSee('Re-order missing');
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders', ['follow_up' => $this->purchaseOrder->id]))
+        ->assertDontSee('Re-ordering the')
+        ->assertDontSee('name="quantity" value="50"', false);
+});

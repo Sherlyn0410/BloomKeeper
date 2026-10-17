@@ -101,6 +101,7 @@
                                 <span class="font-semibold">Shop received {{ $purchaseOrder->received_quantity }} of {{ $purchaseOrder->orderedQuantity() }}</span>
                                 @if ($receivedDifference < 0)
                                     · {{ abs($receivedDifference) }} short.
+                                    <span class="block text-xs">The shop may send a follow-up order for the missing flowers. Use Messages to discuss.</span>
                                 @elseif ($receivedDifference > 0)
                                     · {{ $receivedDifference }} extra.
                                 @else

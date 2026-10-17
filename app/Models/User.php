@@ -24,6 +24,20 @@ class User extends Authenticatable implements MustVerifyEmail
     ];
 
     /**
+     * Messages from other people that this user hasn't opened yet, across every conversation.
+     */
+    public function unreadMessageCount(): int
+    {
+        return Message::query()
+            ->join('conversations', 'conversations.id', '=', 'messages.conversation_id')
+            ->where('messages.user_id', '!=', $this->id)
+            ->where(fn ($query) => $query
+                ->where(fn ($query) => $query->where('conversations.user_one_id', $this->id)->whereColumn('messages.id', '>', 'conversations.user_one_last_read_id'))
+                ->orWhere(fn ($query) => $query->where('conversations.user_two_id', $this->id)->whereColumn('messages.id', '>', 'conversations.user_two_last_read_id')))
+            ->count();
+    }
+
+    /**
      * Time-of-day greeting in Malaysia time with the user's first name, e.g. "Good afternoon, Sherlyn."
      */
     public function greeting(): string

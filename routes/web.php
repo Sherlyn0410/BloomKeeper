@@ -4,6 +4,7 @@ use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminOperationsController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StaffCustomerController;
 use App\Http\Controllers\StaffDashboardController;
@@ -109,6 +110,14 @@ Route::middleware('auth')->group(function () use ($sharedOperationsRoutes): void
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
+        Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
+        Route::post('/messages', [MessageController::class, 'start'])->name('messages.start');
+        Route::middleware('can:view-conversation,conversation')->group(function (): void {
+            Route::get('/messages/{conversation}', [MessageController::class, 'show'])->name('messages.show');
+            Route::post('/messages/{conversation}', [MessageController::class, 'store'])->name('messages.store');
+            Route::get('/messages/{conversation}/poll', [MessageController::class, 'poll'])->name('messages.poll');
+            Route::get('/messages/{conversation}/images/{message}', [MessageController::class, 'image'])->name('messages.image');
+        });
     });
 
     Route::middleware('can:manage-users')->prefix('admin')->name('admin.')->group(function () use ($sharedOperationsRoutes): void {

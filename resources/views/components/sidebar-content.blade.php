@@ -57,7 +57,10 @@
                 ])
             >
                 <span @class(['size-2 rounded-full', 'bg-[#e3953d]' => $item['active'], 'bg-[#b8cfca]' => ! $item['active']])></span>
-                {{ $item['label'] }}
+                <span class="flex-1">{{ $item['label'] }}</span>
+                @if (! empty($item['badge']))
+                    <span class="rounded-full bg-[#b84331] px-2 text-xs font-bold text-white" aria-label="{{ $item['badge'] }} unread">{{ $item['badge'] }}</span>
+                @endif
             </a>
         @endif
     @endforeach

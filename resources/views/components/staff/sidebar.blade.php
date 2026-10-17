@@ -24,6 +24,10 @@
             ['label' => 'Stock returns', 'route' => 'staff.stock-returns', 'active' => request()->routeIs('staff.stock-returns')],
         ];
     }
+
+    if (auth()->user()->can('use-workspace')) {
+        $navigation[] = ['label' => 'Messages', 'route' => 'messages.index', 'active' => request()->routeIs('messages.*'), 'badge' => auth()->user()->unreadMessageCount()];
+    }
 @endphp
 
 <x-sidebar :navigation="$navigation" subtitle="{{ ucfirst(auth()->user()->role) }} workspace" role-label="{{ ucfirst(auth()->user()->role) }}" home-route="dashboard" :mobile="$mobile" />

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Conversation;
 use App\Models\CustomerOrder;
 use App\Models\PurchaseOrder;
 use App\Models\StockAdjustment;
@@ -44,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
             && ($user->role === 'admin' || $stockReturn->created_by === $user->id));
         Gate::define('edit-stock-return', fn (User $user, StockReturn $stockReturn): bool => Gate::forUser($user)->allows('cancel-stock-return', $stockReturn));
         Gate::define('respond-stock-return', fn (User $user, StockReturn $stockReturn): bool => $stockReturn->supplier_id === $user->id && $stockReturn->isAwaitingSupplier());
+        Gate::define('view-conversation', fn (User $user, Conversation $conversation): bool => $conversation->includes($user));
         Gate::define('edit-wastage', fn (User $user, StockAdjustment $adjustment): bool => $adjustment->isWastageEditableBy($user));
         Gate::define('manage-customers', fn (User $user): bool => in_array($user->role, ['admin', 'staff'], true) && $user->approval_status === 'approved');
 

@@ -6,6 +6,16 @@
     $failedReceiveId = (int) old('receiving_purchase_order');
     // A Reorder link from a low-stock alert pre-fills the create form.
     $reorder = array_filter(['supplier_id' => request('supplier'), 'flower_type' => request('flower')]);
+    // "Re-order missing" on a short delivery pre-fills the same supplier, flower, and missing quantity.
+    if ($followUpOf) {
+        $missingQuantity = abs($followUpOf->receivedDifference());
+        $reorder = [
+            'supplier_id' => $followUpOf->supplier_id,
+            'flower_type' => $followUpOf->items->first()?->flower_type,
+            'quantity' => $missingQuantity,
+            'notes' => "Follow-up to {$followUpOf->reference()} ({$missingQuantity} short)",
+        ];
+    }
     $createOld = fn (string $key): mixed => $failedEditId || $failedReceiveId ? null : old($key, $reorder[$key] ?? null);
 @endphp
 
@@ -18,7 +28,9 @@
             <h2 class="bk-card-title">Create purchase order</h2>
             <p class="mt-1 text-sm text-[#607a72]">Send a request to an approved supplier. They see it in their account and mark it fulfilled.</p>
         </div>
-        @if (isset($reorder['flower_type']) && ! $errors->any())
+        @if ($followUpOf && ! $errors->any())
+            <p class="mt-4 rounded-xl bg-[#fff0d5] px-3 py-2 text-sm text-[#a76513]">Re-ordering the {{ $reorder['quantity'] }} {{ $reorder['flower_type'] }} missing from {{ $followUpOf->reference() }}. Please review the details and send.</p>
+        @elseif (isset($reorder['flower_type']) && ! $errors->any())
             <p class="mt-4 rounded-xl bg-[#fff0d5] px-3 py-2 text-sm text-[#a76513]">{{ $reorder['flower_type'] }} stock is low. {{ $suppliers->contains('id', (int) ($reorder['supplier_id'] ?? 0)) ? 'The previous supplier has been selected. Please enter the quantity required.' : 'Please select a supplier and enter the quantity required.' }}</p>
         @endif
         @if ($suppliers->isEmpty())
@@ -199,6 +211,9 @@
                                     Receive into stock
                                 </button>
                             @elseif ($purchaseOrder->isLocked())
+                                @if ($receivedDifference < 0)
+                                    <a href="{{ route($area.'.purchase-orders', ['follow_up' => $purchaseOrder->id]) }}#create-purchase-order" class="bk-btn bk-btn-accent bk-btn-sm h-8">Re-order missing {{ abs($receivedDifference) }}</a>
+                                @endif
                                 <span class="inline-flex h-8 shrink-0 items-center gap-1 text-xs font-semibold text-[#8aa39c]" title="Fulfilled orders have been delivered and can't be changed">
                                     <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" /></svg>
                                     Locked
