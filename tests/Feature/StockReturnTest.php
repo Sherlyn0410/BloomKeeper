@@ -173,3 +173,54 @@ test('older batches are left out of the return form and lose the return link', f
     $this->actingAs($this->staff)->get(route('staff.stock-returns'))->assertDontSee('<option value="'.$this->roses->id.'"', false);
     $this->actingAs($this->staff)->get(route('staff.inventory'))->assertDontSee(route('staff.stock-returns', ['item' => $this->roses->id]));
 });
+
+test('a pending return can be edited and stock follows the new quantity', function (int $newQuantity, int $stockAfter) {
+    sendReturn($this->staff);
+    $stockReturn = StockReturn::sole();
+
+    $this->actingAs($this->staff)->put(route('staff.stock-returns.update', $stockReturn), ['quantity' => $newQuantity, 'reason' => 'poor_quality', 'notes' => 'Wilted heads'])
+        ->assertSessionHasNoErrors();
+
+    expect($stockReturn->refresh())->quantity->toBe($newQuantity)->reason->toBe('poor_quality')->notes->toBe('Wilted heads')
+        ->and($stockReturn->stockAdjustment->quantity_change)->toBe(-$newQuantity)
+        ->and($this->roses->refresh()->quantity)->toBe($stockAfter);
+
+    $this->actingAs($this->supplier)->get(route('supplier.stock-returns.index'))->assertSee("{$newQuantity} × Roses")->assertSee('Wilted heads');
+})->with([
+    'fewer' => [2, 18],
+    'more' => [8, 12],
+    'whole batch' => [20, 0],
+]);
+
+test('editing a return cannot take more than the batch can cover', function () {
+    sendReturn($this->staff);
+    $stockReturn = StockReturn::sole();
+
+    $this->actingAs($this->staff)->put(route('staff.stock-returns.update', $stockReturn), ['quantity' => 21, 'reason' => 'damaged'])
+        ->assertSessionHasErrors(['quantity' => 'Only 20 Roses available. Unable to return 21.']);
+
+    expect($stockReturn->refresh()->quantity)->toBe(5)
+        ->and($this->roses->refresh()->quantity)->toBe(15);
+});
+
+test('only pending returns can be edited, by their creator or an admin', function () {
+    $otherStaff = User::factory()->create(['role' => 'staff']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    sendReturn($this->staff);
+    $stockReturn = StockReturn::sole();
+    $payload = ['quantity' => 3, 'reason' => 'damaged'];
+
+    $this->actingAs($otherStaff)->put(route('staff.stock-returns.update', $stockReturn), $payload)->assertForbidden();
+    $this->actingAs($this->supplier)->put(route('staff.stock-returns.update', $stockReturn), $payload)->assertForbidden();
+    $this->actingAs($admin)->put(route('admin.stock-returns.update', $stockReturn), $payload)->assertSessionHasNoErrors();
+
+    $stockReturn->accept(null);
+    $this->actingAs($this->staff)->put(route('staff.stock-returns.update', $stockReturn), $payload)->assertForbidden();
+    $this->actingAs($this->staff)->get(route('staff.stock-returns'))->assertDontSee('edit-return-'.$stockReturn->id);
+});
+
+test('guests are sent to login when editing a return', function () {
+    $stockReturn = StockReturn::factory()->create();
+
+    $this->put(route('staff.stock-returns.update', $stockReturn), ['quantity' => 1, 'reason' => 'damaged'])->assertRedirect(route('login'));
+});

@@ -42,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('respond-purchase-order', fn (User $user, PurchaseOrder $order): bool => $order->supplier_id === $user->id && $order->isAwaitingSupplier());
         Gate::define('cancel-stock-return', fn (User $user, StockReturn $stockReturn): bool => $stockReturn->isAwaitingSupplier()
             && ($user->role === 'admin' || $stockReturn->created_by === $user->id));
+        Gate::define('edit-stock-return', fn (User $user, StockReturn $stockReturn): bool => Gate::forUser($user)->allows('cancel-stock-return', $stockReturn));
         Gate::define('respond-stock-return', fn (User $user, StockReturn $stockReturn): bool => $stockReturn->supplier_id === $user->id && $stockReturn->isAwaitingSupplier());
         Gate::define('edit-wastage', fn (User $user, StockAdjustment $adjustment): bool => $adjustment->isWastageEditableBy($user));
         Gate::define('manage-customers', fn (User $user): bool => in_array($user->role, ['admin', 'staff'], true) && $user->approval_status === 'approved');

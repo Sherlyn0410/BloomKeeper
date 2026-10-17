@@ -35,6 +35,7 @@ $sharedOperationsRoutes = function (): void {
     Route::get('/stock-returns', [StockReturnController::class, 'index'])->name('stock-returns');
     Route::post('/stock-returns', [StockReturnController::class, 'store'])->name('stock-returns.store');
     Route::patch('/stock-returns/{stockReturn}/cancel', [StockReturnController::class, 'cancel'])->middleware('can:cancel-stock-return,stockReturn')->name('stock-returns.cancel');
+    Route::put('/stock-returns/{stockReturn}', [StockReturnController::class, 'update'])->middleware('can:edit-stock-return,stockReturn')->name('stock-returns.update');
     Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->middleware('can:update-order,customerOrder')->name('orders.status');
     Route::patch('/orders/{customerOrder}/paid', [AdminOperationsController::class, 'markOrderPaid'])->middleware('can:mark-order-paid,customerOrder')->name('orders.paid');
     Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');

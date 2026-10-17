@@ -1,6 +1,9 @@
 @php
     // Admins and staff share this page; links and forms stay inside the viewer's own area.
     $area = auth()->user()->can('manage-users') ? 'admin' : 'staff';
+    // When an edit fails validation, its old input belongs to that edit dialog, not to the create form.
+    $failedEditId = (int) old('editing_stock_return');
+    $createOld = fn (string $key): mixed => $failedEditId ? null : old($key);
     $statusStyles = [
         'requested' => ['label' => 'Pending', 'badge' => 'bg-[#fff0d5] text-[#a76513]', 'dot' => 'bg-[#a76513]'],
         'accepted' => ['label' => 'Accepted', 'badge' => 'bg-[#d7f0df] text-[#187849]', 'dot' => 'bg-[#187849]'],
@@ -28,7 +31,7 @@
                 <select name="inventory_item_id" required class="bk-input">
                     <option value="">Select a batch</option>
                     @foreach ($returnableBatches as $batch)
-                        <option value="{{ $batch->id }}" @selected((int) old('inventory_item_id', $selectedItemId) === $batch->id)>
+                        <option value="{{ $batch->id }}" @selected((int) ($createOld('inventory_item_id') ?? $selectedItemId) === $batch->id)>
                             {{ $batch->flower_type }} · {{ $batch->supplier->name }} · received {{ $batch->date_received->format('d M') }} · {{ $batch->quantity }} in stock
                         </option>
                     @endforeach
@@ -36,20 +39,20 @@
             </label>
             <label class="bk-label">
                 Quantity
-                <input name="quantity" value="{{ old('quantity') }}" type="number" min="1" required class="bk-input">
+                <input name="quantity" value="{{ $createOld('quantity') }}" type="number" min="1" required class="bk-input">
             </label>
             <label class="bk-label">
                 Reason
                 <select name="reason" required class="bk-input">
                     @foreach (\App\Models\StockReturn::REASONS as $value => $label)
-                        <option value="{{ $value }}" @selected(old('reason') === $value)>{{ $label }}</option>
+                        <option value="{{ $value }}" @selected($createOld('reason') === $value)>{{ $label }}</option>
                     @endforeach
                 </select>
             </label>
             <div class="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:items-end lg:col-span-3">
                 <label class="bk-label flex-1">
                     <span>Notes for the supplier <span class="font-normal text-[#8aa39c]">(optional)</span></span>
-                    <input name="notes" value="{{ old('notes') }}" maxlength="1000" placeholder="e.g. Petals bruised on arrival" class="bk-input">
+                    <input name="notes" value="{{ $createOld('notes') }}" maxlength="1000" placeholder="e.g. Petals bruised on arrival" class="bk-input">
                 </label>
                 <button class="bk-btn bk-btn-primary shrink-0">Submit return</button>
             </div>
@@ -138,26 +141,93 @@
                         </p>
                     @endif
 
-                    @if ($stockReturn->status === 'rejected' || auth()->user()->can('cancel-stock-return', $stockReturn))
+                    @if ($stockReturn->status === 'rejected' || auth()->user()->can('cancel-stock-return', $stockReturn) || auth()->user()->can('edit-stock-return', $stockReturn))
                         <div class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#e3eeeb] pt-3">
                             @if ($stockReturn->status === 'rejected')
                                 <p class="text-xs font-semibold text-[#a76513]">Rejected by the supplier. Recorded as wastage.</p>
                             @else
                                 <p class="text-xs text-[#607a72]">Awaiting response from {{ $stockReturn->supplier->name }}.</p>
                             @endif
+                            <div class="ml-auto flex flex-wrap items-center gap-2">
+                            @can('edit-stock-return', $stockReturn)
+                                <button type="button" onclick="document.getElementById('edit-return-{{ $stockReturn->id }}').showModal()" class="bk-btn bk-btn-secondary bk-btn-sm h-8">
+                                    <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M13.59 3.59a2 2 0 0 1 2.82 2.82l-8.6 8.6a2 2 0 0 1-.9.52l-3.12.89a.5.5 0 0 1-.62-.62l.89-3.12a2 2 0 0 1 .52-.9l8.6-8.6Z" /></svg>
+                                    Edit
+                                </button>
+                            @endcan
                             @can('cancel-stock-return', $stockReturn)
-                                <form method="POST" action="{{ route($area.'.stock-returns.cancel', $stockReturn) }}" onsubmit="return confirm(@js("Cancel {$stockReturn->reference()}? The stock will be restored to inventory."))" class="ml-auto">
+                                <form method="POST" action="{{ route($area.'.stock-returns.cancel', $stockReturn) }}" onsubmit="return confirm(@js("Cancel {$stockReturn->reference()}? The stock will be restored to inventory."))">
                                     @csrf
                                     @method('PATCH')
                                     <button type="submit" class="bk-btn bk-btn-secondary bk-btn-sm h-8">Cancel return</button>
                                 </form>
                             @endcan
+                            </div>
                         </div>
                     @endif
+
+                    @can('edit-stock-return', $stockReturn)
+                        @php
+                            $isFailedEdit = $failedEditId === $stockReturn->id;
+                            $editValue = fn (string $key, mixed $current): mixed => $isFailedEdit ? old($key) : $current;
+                            $availableToReturn = ($stockReturn->inventoryItem?->quantity ?? 0) + $stockReturn->quantity;
+                        @endphp
+                        <dialog
+                            id="edit-return-{{ $stockReturn->id }}"
+                            aria-labelledby="edit-return-title-{{ $stockReturn->id }}"
+                            @if ($isFailedEdit) data-open-on-load @endif
+                            class="fixed left-1/2 top-1/2 m-0 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[24px] bg-white p-0 backdrop:bg-[#1c2e28]/40"
+                        >
+                            <form method="POST" action="{{ route($area.'.stock-returns.update', $stockReturn) }}" class="max-h-[calc(100vh-2rem)] overflow-y-auto p-6 sm:p-8">
+                                @csrf
+                                @method('PUT')
+                                <input type="hidden" name="editing_stock_return" value="{{ $stockReturn->id }}">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <h3 id="edit-return-title-{{ $stockReturn->id }}" class="font-serif text-xl font-bold text-[#1c2e28]">Edit {{ $stockReturn->reference() }}</h3>
+                                        <p class="mt-1 text-sm text-[#607a72]">{{ $stockReturn->flower_type }} · {{ $stockReturn->supplier->name }}. Stock is adjusted to match the new quantity.</p>
+                                    </div>
+                                    <button type="button" aria-label="Close edit dialog" class="cursor-pointer rounded-full p-1.5 text-[#607a72] hover:bg-[#edf7f5]" onclick="this.closest('dialog').close()">&#10005;</button>
+                                </div>
+                                @if ($isFailedEdit && $errors->any())
+                                    <ul class="mt-4 list-inside list-disc rounded-xl bg-[#f5dcd7] px-4 py-2 text-sm text-[#b84331]">
+                                        @foreach ($errors->all() as $error)
+                                            <li>{{ $error }}</li>
+                                        @endforeach
+                                    </ul>
+                                @endif
+                                <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                                    <label class="bk-label">
+                                        <span>Quantity <span class="font-normal text-[#8aa39c]">(max {{ $availableToReturn }})</span></span>
+                                        <input name="quantity" value="{{ $editValue('quantity', $stockReturn->quantity) }}" type="number" min="1" max="{{ $availableToReturn }}" required class="bk-input">
+                                    </label>
+                                    <label class="bk-label">
+                                        Reason
+                                        <select name="reason" required class="bk-input">
+                                            @foreach (\App\Models\StockReturn::REASONS as $value => $label)
+                                                <option value="{{ $value }}" @selected($editValue('reason', $stockReturn->reason) === $value)>{{ $label }}</option>
+                                            @endforeach
+                                        </select>
+                                    </label>
+                                    <label class="bk-label sm:col-span-2">
+                                        <span>Notes for the supplier <span class="font-normal text-[#8aa39c]">(optional)</span></span>
+                                        <textarea name="notes" rows="2" maxlength="1000" class="bk-input">{{ $editValue('notes', $stockReturn->notes) }}</textarea>
+                                    </label>
+                                </div>
+                                <div class="mt-6 flex justify-end gap-2">
+                                    <button type="button" class="bk-btn bk-btn-ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                                    <button class="bk-btn bk-btn-primary">Save changes</button>
+                                </div>
+                            </form>
+                        </dialog>
+                    @endcan
                 </article>
             @empty
                 <p class="bk-tile text-sm text-[#607a72]">{{ $activeStatus ? 'No returns with this status.' : 'No stock returns have been recorded.' }}</p>
             @endforelse
         </div>
     </section>
+    <script>
+        document.querySelector('dialog[data-open-on-load]')?.showModal();
+    </script>
 </x-workspace.layout>

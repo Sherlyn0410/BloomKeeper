@@ -53,6 +53,19 @@ class StockReturnController extends Controller
         return back()->with('status', "Return {$stockReturn->reference()} submitted to {$stockReturn->supplier->name}. Stock has been deducted.");
     }
 
+    public function update(Request $request, StockReturn $stockReturn): RedirectResponse
+    {
+        $data = $request->validate([
+            'quantity' => ['required', 'integer', 'min:1'],
+            'reason' => ['required', Rule::in(array_keys(StockReturn::REASONS))],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $stockReturn->revise((int) $data['quantity'], $data['reason'], $data['notes'] ?? null);
+
+        return back()->with('status', "Return {$stockReturn->reference()} updated.");
+    }
+
     public function cancel(StockReturn $stockReturn): RedirectResponse
     {
         $stockReturn->cancel();

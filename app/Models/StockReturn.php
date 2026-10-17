@@ -103,6 +103,28 @@ class StockReturn extends Model
     }
 
     /**
+     * Change a pending return. A new quantity moves the difference between the batch and the return,
+     * so stock always matches what is actually being sent back.
+     *
+     * @throws ValidationException when the batch cannot cover the new quantity.
+     */
+    public function revise(int $quantity, string $reason, ?string $notes): void
+    {
+        DB::transaction(function () use ($quantity, $reason, $notes): void {
+            $batch = InventoryItem::query()->lockForUpdate()->findOrFail($this->inventory_item_id);
+            $available = $batch->quantity + $this->quantity;
+
+            if ($quantity > $available) {
+                throw ValidationException::withMessages(['quantity' => "Only {$available} {$batch->flower_type} available. Unable to return {$quantity}."]);
+            }
+
+            $batch->update(['quantity' => $available - $quantity]);
+            $this->stockAdjustment?->update(['quantity_change' => -$quantity, 'reason' => $reason]);
+            $this->update(['quantity' => $quantity, 'reason' => $reason, 'notes' => $notes]);
+        });
+    }
+
+    /**
      * The shop changed its mind before the supplier answered, so the flowers go back into stock.
      */
     public function cancel(): void
