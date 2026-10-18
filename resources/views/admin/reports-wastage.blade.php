@@ -34,7 +34,8 @@
                 <a href="{{ route('admin.reports.wastage.export', request()->query()) }}" class="bk-btn bk-btn-primary">Export Excel</a>
             </div>
         </div>
-        <form class="mt-5 flex flex-wrap items-end gap-2">
+        <x-admin.report-periods route="admin.reports.wastage" :sort="$sort" :direction="$direction" class="mt-5" />
+        <form class="mt-3 flex flex-wrap items-end gap-2">
             <label class="bk-label">From<input name="from" value="{{ request('from') }}" type="date" class="bk-input"></label>
             <label class="bk-label">To<input name="to" value="{{ request('to') }}" type="date" class="bk-input"></label>
             <input type="hidden" name="sort" value="{{ $sort }}">
@@ -44,7 +45,6 @@
                 <a href="{{ route('admin.reports.wastage', ['sort' => $sort, 'direction' => $direction]) }}" class="bk-btn bk-btn-ghost">Clear</a>
             @endif
         </form>
-        <p class="mt-3 text-xs text-[#8aa39c]">Filtered by the date the wastage was recorded.</p>
 
         <div class="mt-6 overflow-x-auto">
             <table class="w-full min-w-[820px] text-left text-sm">

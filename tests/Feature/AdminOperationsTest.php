@@ -644,3 +644,18 @@ test('custom date ranges have no period arrows', function () {
     $this->actingAs($admin)->get(route('admin.reports', ['from' => '2026-09-03', 'to' => '2026-09-17']))
         ->assertDontSee('aria-label="Previous period"', false);
 });
+
+test('the wastage report has the same period buttons and arrows', function () {
+    $this->travelTo(Carbon::parse('2026-10-15 10:00:00', 'Asia/Kuala_Lumpur'));
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->get(route('admin.reports.wastage'))
+        ->assertOk()
+        ->assertSeeInOrder(['Daily', 'Weekly', 'Monthly', 'All time'])
+        ->assertSee('/admin/reports/wastage?from=2026-10-01&amp;to=2026-10-31', false);
+
+    $this->actingAs($admin)->get(route('admin.reports.wastage', ['from' => '2026-09-01', 'to' => '2026-09-30']))
+        ->assertSee('September 2026')
+        ->assertSee('/admin/reports/wastage?from=2026-08-01&amp;to=2026-08-31', false)
+        ->assertSee('/admin/reports/wastage?from=2026-10-01&amp;to=2026-10-31', false);
+});
