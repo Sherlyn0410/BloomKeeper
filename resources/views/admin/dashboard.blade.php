@@ -87,5 +87,8 @@
                 </section>
             </main>
         </div>
+        @if (auth()->user()->can('use-workspace'))
+            <x-chat-widget />
+        @endif
     </body>
 </html>

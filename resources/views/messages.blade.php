@@ -1,5 +1,8 @@
 @php
     $conversation ??= null;
+    // Inside the floating chat panel the page drops the sidebar layout and keeps links inside the panel.
+    $isWidget = request()->boolean('widget');
+    $widgetQuery = $isWidget ? ['widget' => 1] : [];
     $initialsOf = fn ($person) => Str::of($person->name)->explode(' ')->filter()->take(2)->map(fn ($part) => Str::upper(Str::substr($part, 0, 1)))->join('');
     $roleTones = [
         'admin' => 'bg-[#d5e4e1] text-[#285443]',
@@ -8,15 +11,16 @@
     ];
 @endphp
 
-<x-workspace.layout
+<x-dynamic-component
+    :component="$isWidget ? 'chat-frame' : 'workspace.layout'"
     title="Messages"
     description="Chat directly with admins, staff, and suppliers."
 >
-    <section class="bk-card overflow-hidden p-0 sm:p-0">
-        <div class="grid h-[calc(100vh-15rem)] min-h-[28rem] lg:grid-cols-[19rem_minmax(0,1fr)]">
+    <section @class(['overflow-hidden', 'h-full' => $isWidget, 'bk-card p-0 sm:p-0' => ! $isWidget])>
+        <div @class(['grid', 'h-full' => $isWidget, 'h-[calc(100vh-15rem)] min-h-[28rem] lg:grid-cols-[19rem_minmax(0,1fr)]' => ! $isWidget])>
             {{-- Conversation list: hidden on phones while a chat is open --}}
-            <aside @class(['min-h-0 flex-col border-[#dce9e6] lg:flex lg:border-r', 'hidden' => $conversation, 'flex' => ! $conversation])>
-                <form method="POST" action="{{ route('messages.start') }}" class="flex gap-2 border-b border-[#dce9e6] p-4">
+            <aside @class(['min-h-0 flex-col border-[#dce9e6]', 'lg:flex lg:border-r' => ! $isWidget, 'hidden' => $conversation, 'flex' => ! $conversation])>
+                <form method="POST" action="{{ route('messages.start', $widgetQuery) }}" class="flex gap-2 border-b border-[#dce9e6] p-4">
                     @csrf
                     <label for="new-message-user" class="sr-only">New message to</label>
                     <select id="new-message-user" name="user_id" required class="bk-input min-w-0 flex-1">
@@ -39,7 +43,7 @@
                             $latest = $item['conversation']->latestMessage;
                         @endphp
                         <a
-                            href="{{ route('messages.show', $item['conversation']) }}"
+                            href="{{ route('messages.show', [$item['conversation'], ...$widgetQuery]) }}"
                             @if ($isOpen) aria-current="page" @endif
                             @class([
                                 'flex items-start gap-3 border-b border-[#eef4f2] px-4 py-3 transition',
@@ -73,7 +77,7 @@
             @if ($conversation)
                 <div class="flex min-h-0 flex-col">
                     <header class="flex items-center gap-3 border-b border-[#dce9e6] px-4 py-3">
-                        <a href="{{ route('messages.index') }}" class="flex size-8 items-center justify-center rounded-full text-[#285443] hover:bg-[#e3f1ee] lg:hidden" aria-label="Back to conversations">
+                        <a href="{{ route('messages.index', $widgetQuery) }}" @class(['flex size-8 items-center justify-center rounded-full text-[#285443] hover:bg-[#e3f1ee]', 'lg:hidden' => ! $isWidget]) aria-label="Back to conversations">
                             <svg class="size-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" /></svg>
                         </a>
                         <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#285443] text-xs font-bold text-white">{{ $initialsOf($otherUser) }}</span>
@@ -114,7 +118,7 @@
                         @endforelse
                     </div>
 
-                    <form id="chat-form" method="POST" action="{{ route('messages.store', $conversation) }}" enctype="multipart/form-data" class="border-t border-[#dce9e6] p-3">
+                    <form id="chat-form" method="POST" action="{{ route('messages.store', [$conversation, ...$widgetQuery]) }}" enctype="multipart/form-data" class="border-t border-[#dce9e6] p-3">
                         @csrf
                         <div id="chat-attachment" class="mb-2 hidden items-center gap-2 rounded-xl bg-[#edf7f5] px-3 py-1.5 text-xs text-[#285443]">
                             <svg class="size-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 0 0 .75-.75v-2.69l-2.22-2.219a.75.75 0 0 0-1.06 0l-1.91 1.909.47.47a.75.75 0 1 1-1.06 1.06L6.53 8.091a.75.75 0 0 0-1.06 0L2.5 11.06ZM12 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" clip-rule="evenodd" /></svg>
@@ -135,7 +139,7 @@
                     <p id="chat-error" class="hidden px-4 pb-3 text-xs text-[#b84331]" role="alert"></p>
                 </div>
             @else
-                <div class="hidden items-center justify-center p-8 text-center lg:flex">
+                <div @class(['hidden items-center justify-center p-8 text-center', 'lg:flex' => ! $isWidget])>
                     <div>
                         <p class="font-semibold text-[#49665f]">No conversation open</p>
                         <p class="mt-1 text-sm text-[#607a72]">Select a conversation, or choose someone to message.</p>
@@ -260,4 +264,4 @@
             })();
         </script>
     @endif
-</x-workspace.layout>
+</x-dynamic-component>

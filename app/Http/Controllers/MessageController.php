@@ -35,6 +35,14 @@ class MessageController extends Controller
     }
 
     /**
+     * Unread total for the floating chat button's badge.
+     */
+    public function unread(Request $request): JsonResponse
+    {
+        return response()->json(['count' => $request->user()->unreadMessageCount()]);
+    }
+
+    /**
      * Open the conversation with someone, starting it if this is the first message between them.
      */
     public function start(Request $request): RedirectResponse
@@ -47,7 +55,10 @@ class MessageController extends Controller
             'user_id.exists' => 'That person is not available to message.',
         ]);
 
-        return redirect()->route('messages.show', Conversation::between($request->user(), User::query()->findOrFail($data['user_id'])));
+        return redirect()->route('messages.show', [
+            Conversation::between($request->user(), User::query()->findOrFail($data['user_id'])),
+            ...($request->boolean('widget') ? ['widget' => 1] : []),
+        ]);
     }
 
     public function store(Request $request, Conversation $conversation): JsonResponse|RedirectResponse
@@ -69,7 +80,7 @@ class MessageController extends Controller
 
         return $request->expectsJson()
             ? response()->json($message->toChatArray($request->user()), 201)
-            : redirect()->route('messages.show', $conversation);
+            : redirect()->route('messages.show', [$conversation, ...($request->boolean('widget') ? ['widget' => 1] : [])]);
     }
 
     /**

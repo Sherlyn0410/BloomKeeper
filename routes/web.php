@@ -111,6 +111,7 @@ Route::middleware('auth')->group(function () use ($sharedOperationsRoutes): void
         Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
         Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
+        Route::get('/messages/unread', [MessageController::class, 'unread'])->name('messages.unread');
         Route::post('/messages', [MessageController::class, 'start'])->name('messages.start');
         Route::middleware('can:view-conversation,conversation')->group(function (): void {
             Route::get('/messages/{conversation}', [MessageController::class, 'show'])->name('messages.show');

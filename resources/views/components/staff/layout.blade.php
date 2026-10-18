@@ -47,5 +47,8 @@
                 </div>
             </main>
         </div>
+        @if (auth()->user()->can('use-workspace') && ! request()->routeIs('messages.*'))
+            <x-chat-widget />
+        @endif
     </body>
 </html>

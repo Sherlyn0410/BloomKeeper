@@ -188,3 +188,46 @@ test('attachments must be photos of 5 MB or less', function (UploadedFile $file,
     'too large' => [fn () => UploadedFile::fake()->image('huge.jpg')->size(6000), 'Photos must be 5 MB or smaller.'],
     'not a photo' => [fn () => UploadedFile::fake()->create('invoice.pdf', 100, 'application/pdf'), 'The attachment must be a photo.'],
 ]);
+
+test('every role sees the floating chat button with its unread count', function (string $role, string $page) {
+    Conversation::between($this->{$role}, $role === 'admin' ? $this->staff : $this->admin)
+        ->send($role === 'admin' ? $this->staff : $this->admin, 'Hello');
+
+    $this->actingAs($this->{$role})->get(route($page))
+        ->assertSee('id="chat-widget-toggle"', false)
+        ->assertSee('aria-label="1 unread"', false)
+        ->assertSee(route('messages.index', ['widget' => 1]));
+})->with([
+    'admin' => ['admin', 'admin.dashboard'],
+    'staff' => ['staff', 'dashboard'],
+    'supplier' => ['supplier', 'dashboard'],
+]);
+
+test('the floating button is not shown on the messages page itself', function () {
+    $this->actingAs($this->staff)->get(route('messages.index'))->assertDontSee('id="chat-widget-toggle"', false);
+});
+
+test('the chat panel shows messages without the sidebar and keeps links inside the panel', function () {
+    $conversation = Conversation::between($this->staff, $this->supplier);
+    $conversation->send($this->supplier, 'Delivered at 10am');
+
+    $this->actingAs($this->staff)->get(route('messages.index', ['widget' => 1]))
+        ->assertOk()
+        ->assertDontSee('mobile-sidebar', false)
+        ->assertSee(route('messages.show', [$conversation, 'widget' => 1]));
+
+    $this->actingAs($this->staff)->get(route('messages.show', [$conversation, 'widget' => 1]))
+        ->assertSee('Delivered at 10am')
+        ->assertSee('action="'.route('messages.store', [$conversation, 'widget' => 1]).'"', false);
+
+    $this->actingAs($this->staff)->post(route('messages.start', ['widget' => 1]), ['user_id' => $this->admin->id])
+        ->assertRedirect(route('messages.show', [Conversation::between($this->staff, $this->admin), 'widget' => 1]));
+});
+
+test('the unread count endpoint feeds the badge', function () {
+    Conversation::between($this->staff, $this->supplier)->send($this->supplier, 'One');
+
+    $this->actingAs($this->staff)->getJson(route('messages.unread'))->assertExactJson(['count' => 1]);
+    auth()->logout();
+    $this->getJson(route('messages.unread'))->assertUnauthorized();
+});
