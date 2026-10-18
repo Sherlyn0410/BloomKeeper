@@ -7,12 +7,9 @@
     <div id="chat-widget-panel" hidden class="fixed inset-0 z-50 flex flex-col overflow-hidden bg-white shadow-2xl sm:inset-auto sm:right-6 sm:bottom-24 sm:h-[36rem] sm:max-h-[calc(100vh-8rem)] sm:w-[24rem] sm:rounded-3xl sm:border sm:border-[#d4e4e0]">
         <div class="flex shrink-0 items-center justify-between gap-2 bg-[#285443] px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] text-white sm:pt-3">
             <p class="font-semibold">Messages</p>
-            <div class="flex items-center gap-1">
-                <a href="{{ route('messages.index') }}" class="rounded-lg px-2 py-1 text-xs font-semibold text-white/85 underline-offset-2 hover:bg-white/10 hover:text-white">Open full page</a>
-                <button type="button" id="chat-widget-close" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-white/10" aria-label="Close messages">
-                    <svg class="size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
-                </button>
-            </div>
+            <button type="button" id="chat-widget-close" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-white/10" aria-label="Close messages">
+                <svg class="size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" /></svg>
+            </button>
         </div>
         <iframe id="chat-widget-frame" title="Messages" data-src="{{ route('messages.index', ['widget' => 1]) }}" class="min-h-0 w-full flex-1 border-0"></iframe>
     </div>
