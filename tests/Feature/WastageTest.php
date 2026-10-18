@@ -3,6 +3,7 @@
 use App\Models\InventoryItem;
 use App\Models\StockAdjustment;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 beforeEach(function () {
@@ -289,3 +290,17 @@ test('the wastage report can be sorted and the export follows the sort', functio
     'highest value lost first' => [['sort' => 'value_lost', 'direction' => 'desc'], ['Roses', 'Lilies', 'Tulips']],
     'unknown column falls back to flower' => [['sort' => 'expired'], ['Lilies', 'Roses', 'Tulips']],
 ]);
+
+test('wastage history has period buttons and arrows', function () {
+    $this->travelTo(Carbon::parse('2026-10-15 10:00:00', 'Asia/Kuala_Lumpur'));
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)->get(route('admin.wastage'))
+        ->assertOk()
+        ->assertSeeInOrder(['Daily', 'Weekly', 'Monthly', 'All time'])
+        ->assertSee('/admin/wastage?from=2026-10-12&amp;to=2026-10-18', false);
+
+    $this->actingAs($admin)->get(route('admin.wastage', ['from' => '2026-10-12', 'to' => '2026-10-18']))
+        ->assertSee('12 – 18 Oct 2026')
+        ->assertSee('/admin/wastage?from=2026-10-05&amp;to=2026-10-11', false);
+});

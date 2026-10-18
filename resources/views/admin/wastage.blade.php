@@ -10,7 +10,8 @@
             </div>
             <a href="{{ route('staff.wastage.create') }}" class="bk-btn bk-btn-danger">Record wastage</a>
         </div>
-        <form class="mt-5 flex flex-wrap items-end gap-2">
+        <x-admin.report-periods route="admin.wastage" :sort="$sort" :direction="$direction" class="mt-5" />
+        <form class="mt-3 flex flex-wrap items-end gap-2">
             <label class="bk-label">From<input name="from" value="{{ request('from') }}" type="date" class="bk-input"></label>
             <label class="bk-label">To<input name="to" value="{{ request('to') }}" type="date" class="bk-input"></label>
             <input type="hidden" name="sort" value="{{ $sort }}">
