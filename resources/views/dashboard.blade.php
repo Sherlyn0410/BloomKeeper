@@ -18,17 +18,6 @@
                 <x-dashboard.quick-alerts title="Spoilage alerts" type="spoilage" :alerts="$spoilageItems" :view-all-url="route('staff.inventory', ['sort' => 'spoilage_date'])" empty-message="Nothing is close to spoiling." />
             </div>
         </div>
-
-        <section class="bk-card">
-            <h2 class="bk-card-title">Quick actions</h2>
-            <p class="bk-card-subtitle">Jump straight into today's work.</p>
-            <div class="mt-5 flex flex-wrap gap-3">
-                <a href="{{ route('staff.orders.create') }}" class="bk-btn bk-btn-primary"><x-icons.plus /> Create order</a>
-                <a href="{{ route('staff.purchase-orders') }}" class="bk-btn bk-btn-secondary">Purchase orders</a>
-                <a href="{{ route('staff.customers.index') }}" class="bk-btn bk-btn-secondary">Customers</a>
-                <a href="{{ route('staff.wastage.create') }}" class="bk-btn bk-btn-secondary">Record wastage</a>
-            </div>
-        </section>
     @elsecan('supply-orders')
         <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             @foreach ([
