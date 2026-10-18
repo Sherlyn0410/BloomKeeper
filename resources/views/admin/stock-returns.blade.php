@@ -59,7 +59,7 @@
         </form>
     </section>
 
-    <section class="bk-card">
+    <section data-scroll-on-filter="status" class="scroll-mt-4 bk-card">
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
                 <h2 class="bk-card-title">Return history</h2>

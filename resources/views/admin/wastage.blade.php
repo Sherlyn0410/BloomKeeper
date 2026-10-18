@@ -2,7 +2,7 @@
     title="Wastage History"
     description="Every flower removed from stock as wastage, with who recorded it and why."
 >
-    <section class="bk-card">
+    <section data-scroll-on-filter="from,to,sort,direction,page" class="scroll-mt-4 bk-card">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
                 <h2 class="bk-card-title">Wastage log</h2>

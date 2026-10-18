@@ -15,7 +15,7 @@
     title="Customer Orders"
     description="Review customer collections, inspect order items, and move each order through fulfilment."
 >
-    <section class="bk-card">
+    <section data-scroll-on-filter="customer,date,status" class="scroll-mt-4 bk-card">
         <div>
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>

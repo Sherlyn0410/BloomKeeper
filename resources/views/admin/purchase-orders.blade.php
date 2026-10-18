@@ -69,7 +69,7 @@
         </form>
     </section>
 
-    <section class="bk-card">
+    <section data-scroll-on-filter="search,date,status" class="scroll-mt-4 bk-card">
         @php
             $activeStatus = in_array(request('status'), \App\Models\PurchaseOrder::STATUSES, true) ? request('status') : '';
             $isFiltered = request()->filled('search') || request()->filled('date');

@@ -11,7 +11,7 @@
     title="Purchase orders"
     description="Flowers the shop has ordered from you. Mark each one fulfilled when you deliver, or decline it with a reason."
 >
-    <section class="bk-card">
+    <section data-scroll-on-filter="status" class="scroll-mt-4 bk-card">
         <nav class="flex flex-wrap gap-2" aria-label="Filter by status">
             @foreach (['' => 'All', ...collect($statusStyles)->map(fn ($style) => $style['label'])->all()] as $status => $label)
                 @php

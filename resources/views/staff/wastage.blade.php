@@ -38,7 +38,7 @@
         </form>
     </section>
 
-    <section class="bk-card">
+    <section data-scroll-on-filter="sort,direction" class="scroll-mt-4 bk-card">
         <h2 class="bk-card-title">Recent wastage</h2>
         <div class="mt-4 overflow-x-auto">
             <table class="w-full min-w-[640px] text-left text-sm">

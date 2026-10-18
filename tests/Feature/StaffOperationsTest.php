@@ -194,3 +194,15 @@ test('guests are sent to the login page from the staff operations', function (st
 test('suppliers are blocked from the admin pages', function (string $route) {
     $this->actingAs($this->supplier)->get(route($route))->assertForbidden();
 })->with(['admin.dashboard', 'admin.inventory', 'admin.orders', 'admin.purchase-orders', 'admin.reports', 'admin.wastage', 'admin.users']);
+
+test('filtered lists are marked so the page opens at them', function (string $route, string $filters) {
+    $this->actingAs($this->staff)->get(route($route))
+        ->assertSee('data-scroll-on-filter="'.$filters.'"', false)
+        ->assertSee("querySelectorAll('[data-scroll-on-filter]')", false);
+})->with([
+    'inventory' => ['staff.inventory', 'search,sort,direction,show_empty'],
+    'orders' => ['staff.orders.index', 'customer,date,status'],
+    'purchase orders' => ['staff.purchase-orders', 'search,date,status'],
+    'stock returns' => ['staff.stock-returns', 'status'],
+    'wastage' => ['staff.wastage.create', 'sort,direction'],
+]);

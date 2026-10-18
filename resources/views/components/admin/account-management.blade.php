@@ -4,7 +4,7 @@
     'accountLabel',
 ])
 
-<section class="bk-card overflow-hidden">
+<section data-scroll-on-filter="search,status,page" class="scroll-mt-4 bk-card overflow-hidden">
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
             <h2 class="bk-card-title">{{ $accountLabel }} directory</h2>

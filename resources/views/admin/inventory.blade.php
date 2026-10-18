@@ -59,7 +59,7 @@
         </form>
     </section>
 
-    <section class="bk-card min-w-0 overflow-hidden">
+    <section data-scroll-on-filter="search,sort,direction,show_empty" class="scroll-mt-4 bk-card min-w-0 overflow-hidden">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
                 <h2 class="bk-card-title">Live inventory</h2>

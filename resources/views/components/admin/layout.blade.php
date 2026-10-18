@@ -39,6 +39,7 @@
                 </div>
             </main>
         </div>
+        <x-scroll-to-filtered />
         @if (auth()->user()->can('use-workspace') && ! request()->routeIs('messages.*'))
             <x-chat-widget />
         @endif
