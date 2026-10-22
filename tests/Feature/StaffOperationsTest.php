@@ -200,7 +200,7 @@ test('filtered lists are marked so the page opens at them', function (string $ro
         ->assertSee('data-scroll-on-filter="'.$filters.'"', false)
         ->assertSee("querySelectorAll('[data-scroll-on-filter]')", false);
 })->with([
-    'inventory' => ['staff.inventory', 'search,sort,direction,show_empty'],
+    'inventory' => ['staff.inventory', 'search,sort,direction,show_empty,alert'],
     'orders' => ['staff.orders.index', 'customer,date,status'],
     'purchase orders' => ['staff.purchase-orders', 'search,date,status'],
     'stock returns' => ['staff.stock-returns', 'status'],

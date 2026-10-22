@@ -59,7 +59,7 @@
         </form>
     </section>
 
-    <section data-scroll-on-filter="search,sort,direction,show_empty" class="scroll-mt-4 bk-card min-w-0 overflow-hidden">
+    <section data-scroll-on-filter="search,sort,direction,show_empty,alert" class="scroll-mt-4 bk-card min-w-0 overflow-hidden">
         <div class="flex flex-wrap items-end justify-between gap-4">
             <div>
                 <h2 class="bk-card-title">Live inventory</h2>
@@ -67,10 +67,13 @@
                 <form class="mt-4 flex flex-wrap gap-2">
                     <input type="hidden" name="sort" value="{{ $sort }}">
                     <input type="hidden" name="direction" value="{{ $direction }}">
+                    @if ($alert)
+                        <input type="hidden" name="alert" value="{{ $alert }}">
+                    @endif
                     <input name="search" value="{{ request('search') }}" placeholder="Search flower" class="bk-input w-56">
                     <button class="bk-btn bk-btn-primary">Search</button>
                     @if (request()->filled('search'))
-                        <a href="{{ route($area.'.inventory', array_filter(['sort' => $sort, 'direction' => $direction, 'show_empty' => $showEmpty ? 1 : null])) }}" class="bk-btn bk-btn-ghost">Clear</a>
+                        <a href="{{ route($area.'.inventory', array_filter(['sort' => $sort, 'direction' => $direction, 'show_empty' => $showEmpty ? 1 : null, 'alert' => $alert])) }}" class="bk-btn bk-btn-ghost">Clear</a>
                     @endif
                     <label class="flex cursor-pointer items-center gap-2 px-1 text-sm text-[#49665f]">
                         <input type="checkbox" name="show_empty" value="1" @checked($showEmpty) onchange="this.form.submit()" class="size-4 cursor-pointer accent-[#285443]">
@@ -78,14 +81,34 @@
                     </label>
                 </form>
             </div>
-            <div class="flex flex-wrap gap-2 text-xs font-semibold">
-                <span class="flex items-center gap-1.5 rounded-full bg-[#f5dcd7] px-3 py-1.5 text-[#b84331]">
-                    <span class="h-2 w-2 rounded-full bg-[#b84331]"></span> Spoilage alert
-                </span>
-                <span class="flex items-center gap-1.5 rounded-full bg-[#fff0d5] px-3 py-1.5 text-[#a76513]">
-                    <span class="h-2 w-2 rounded-full bg-[#a76513]"></span> Low stock
-                </span>
-            </div>
+            {{-- Alert filters: click to show only those flowers, click again to show everything --}}
+            <nav class="flex flex-wrap gap-2 text-xs font-semibold" aria-label="Filter by alert">
+                @foreach ([
+                    'spoilage' => ['label' => 'Spoilage alert', 'chip' => 'bg-[#f5dcd7] text-[#b84331]', 'active' => 'bg-[#b84331] text-white', 'dot' => 'bg-[#b84331]'],
+                    'low_stock' => ['label' => 'Low stock', 'chip' => 'bg-[#fff0d5] text-[#a76513]', 'active' => 'bg-[#a76513] text-white', 'dot' => 'bg-[#a76513]'],
+                ] as $alertKey => $chip)
+                    @php
+                        $isActive = $alert === $alertKey;
+                    @endphp
+                    <a
+                        href="{{ route($area.'.inventory', array_filter([...request()->only(['search', 'sort', 'direction', 'show_empty']), 'alert' => $isActive ? null : $alertKey])) }}"
+                        @if ($isActive) aria-current="page" @endif
+                        title="{{ $isActive ? 'Show all flowers' : 'Show only '.Str::lower($chip['label']).' flowers' }}"
+                        @class([
+                            'flex items-center gap-1.5 rounded-full px-3 py-1.5 transition',
+                            $chip['chip'].' hover:brightness-95' => ! $isActive,
+                            $chip['active'] => $isActive,
+                        ])
+                    >
+                        <span @class(['h-2 w-2 rounded-full', $isActive ? 'bg-white' : $chip['dot']])></span>
+                        {{ $chip['label'] }}
+                        <span @class(['rounded-full px-1.5', 'bg-white/20' => $isActive, 'bg-white/60' => ! $isActive])>{{ $alertCounts[$alertKey] }}</span>
+                        @if ($isActive)
+                            <span aria-hidden="true">✕</span>
+                        @endif
+                    </a>
+                @endforeach
+            </nav>
         </div>
 
         <div class="mt-5 overflow-x-auto">
@@ -104,7 +127,7 @@
                 @forelse ($flowerGroups as $groupIndex => $group)
                     @php
                         $stockedBatches = $group['batches']->filter(fn ($batch) => $batch->quantity > 0);
-                        $hasSpoilageAlert = $stockedBatches->contains(fn ($batch) => $batch->spoilageDate()->lte(now()->addDays(2)));
+                        $hasSpoilageAlert = $group['has_spoilage_alert'];
                         $isOutOfStock = $group['total'] === 0;
                         // Price and margin come from batches in stock, so an old sold-out batch can't skew them.
                         $pricedBatches = $isOutOfStock ? $group['batches'] : $stockedBatches;
@@ -323,7 +346,12 @@
                     </tbody>
                 @empty
                     <tbody>
-                        <tr><td colspan="7" class="py-8 text-center text-sm text-[#607a72]">{{ request()->filled('search') ? 'No flowers match your search.' : 'No inventory items yet.' }}</td></tr>
+                        <tr><td colspan="7" class="py-8 text-center text-sm text-[#607a72]">{{ match (true) {
+                            $alert === 'low_stock' => 'No flowers are low on stock.',
+                            $alert === 'spoilage' => 'No flowers are close to spoiling.',
+                            request()->filled('search') => 'No flowers match your search.',
+                            default => 'No inventory items yet.',
+                        } }}</td></tr>
                     </tbody>
                 @endforelse
             </table>

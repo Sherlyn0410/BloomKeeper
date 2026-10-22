@@ -659,3 +659,39 @@ test('the wastage report has the same period buttons and arrows', function () {
         ->assertSee('/admin/reports/wastage?from=2026-08-01&amp;to=2026-08-31', false)
         ->assertSee('/admin/reports/wastage?from=2026-10-01&amp;to=2026-10-31', false);
 });
+
+test('inventory can be filtered to low stock or spoilage alerts', function (?string $alert, array $visible, array $hidden) {
+    $admin = User::factory()->create(['role' => 'admin']);
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 3, 'unit_price' => 1.80, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 8]);
+    InventoryItem::create(['flower_type' => 'Lilies', 'quantity' => 30, 'unit_price' => 3.25, 'date_received' => today()->subDays(6), 'shelf_life_days' => 7, 'low_stock_threshold' => 5]);
+    InventoryItem::create(['flower_type' => 'Orchids', 'quantity' => 30, 'unit_price' => 4.75, 'date_received' => today(), 'shelf_life_days' => 30, 'low_stock_threshold' => 5]);
+
+    $response = $this->actingAs($admin)->get(route('admin.inventory', array_filter(['alert' => $alert])))->assertOk();
+
+    foreach ($visible as $flower) {
+        $response->assertSee('>'.$flower.'</span>', false);
+    }
+    foreach ($hidden as $flower) {
+        $response->assertDontSee('>'.$flower.'</span>', false);
+    }
+})->with([
+    'all' => [null, ['Tulips', 'Lilies', 'Orchids'], []],
+    'low stock' => ['low_stock', ['Tulips'], ['Lilies', 'Orchids']],
+    'spoilage' => ['spoilage', ['Lilies'], ['Tulips', 'Orchids']],
+]);
+
+test('the alert filters show counts and toggle off when clicked again', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 3, 'unit_price' => 1.80, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 8]);
+
+    $this->actingAs($admin)->get(route('admin.inventory'))
+        ->assertSeeInOrder(['Low stock', '1'])
+        ->assertSee(route('admin.inventory', ['alert' => 'low_stock']));
+
+    $this->actingAs($admin)->get(route('admin.inventory', ['alert' => 'low_stock']))
+        ->assertSee('aria-current="page"', false)
+        ->assertSee('title="Show all flowers"', false);
+
+    $this->actingAs($admin)->get(route('admin.inventory', ['alert' => 'spoilage']))
+        ->assertSee('No flowers are close to spoiling.');
+});
