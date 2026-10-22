@@ -12,20 +12,19 @@ class AdminDashboardController extends Controller
 {
     public function __invoke(): View
     {
-        $inventoryItems = InventoryItem::query()->get();
-        $lowStockAlerts = $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock())->count();
-        $spoilageAlerts = $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isNearSpoilage())->count();
+        $stock = InventoryItem::dashboardSummary();
 
         $recentOrders = CustomerOrder::query()->with('items')->latest()->limit(5)->get();
 
         return view('admin.dashboard', [
-            'totalStockItems' => $inventoryItems->count(),
-            'lowStockAlerts' => $lowStockAlerts,
-            'spoilageAlerts' => $spoilageAlerts,
+            'totalStockItems' => $stock['flowersInStock'],
+            'lowStockAlerts' => $stock['lowStockAlerts'],
+            'spoilageAlerts' => $stock['spoilageAlerts'],
             'pendingOrders' => CustomerOrder::query()->where('status', 'pending')->count(),
             'pendingPurchaseOrders' => PurchaseOrder::query()->where('status', 'sent')->count(),
             'recentOrders' => $recentOrders,
-            'recentInventoryAlerts' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock() || $item->isNearSpoilage())->take(6)->values(),
+            'lowStockItems' => $stock['lowStockItems'],
+            'spoilageItems' => $stock['spoilageItems'],
             'totalUsers' => User::query()->count(),
             'pendingUsers' => User::query()->where('approval_status', 'pending')->count(),
             'activeUsers' => User::query()->where('approval_status', 'approved')->count(),

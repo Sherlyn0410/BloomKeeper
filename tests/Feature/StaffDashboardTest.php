@@ -19,12 +19,12 @@ test('staff see the workspace dashboard with stock alerts, collections, and rece
         ->get(route('dashboard'))
         ->assertOk()
         ->assertSee('Good morning, Siti.')
-        ->assertSeeInOrder(['Total stock items', '2', 'Low-stock alerts', '1', 'Spoilage alerts', '1', 'Pending orders', '1', 'Collections today', '1'])
+        ->assertSeeInOrder(['Flowers in stock', '2', 'Low-stock alerts', '1', 'Spoilage alerts', '1', 'Pending orders', '1', 'Collections today', '1'])
         ->assertSee('Aisha Rahman')
         ->assertSee('Daniel Tan')
         ->assertSeeInOrder(['Low stock', 'Tulips', '3 remaining', 'Spoilage alerts', 'Lilies', 'Check by'])
-        ->assertSee(route('staff.inventory', ['sort' => 'quantity']))
-        ->assertSee(route('staff.inventory', ['sort' => 'spoilage_date']))
+        ->assertSee(route('staff.inventory', ['alert' => 'low_stock']))
+        ->assertSee(route('staff.inventory', ['alert' => 'spoilage']))
         ->assertSee(route('staff.orders.index'))
         ->assertSee(route('staff.wastage.create'))
         ->assertDontSee(route('admin.dashboard'));
@@ -91,3 +91,21 @@ test('suppliers see returns waiting for them on the dashboard', function () {
         ->assertDontSee('Tulips')
         ->assertSee(route('supplier.stock-returns.index'));
 });
+
+test('dashboards count stock per flower like the inventory page and ignore empty batches', function (string $role, string $page) {
+    $user = User::factory()->create(['role' => $role]);
+    // Roses: two batches totalling 30 (above threshold 10); an emptied old batch must not count as low stock or spoiling.
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 0, 'unit_price' => 2.50, 'date_received' => today()->subDays(6), 'shelf_life_days' => 7, 'low_stock_threshold' => 10]);
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 8, 'unit_price' => 2.50, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 10]);
+    InventoryItem::create(['flower_type' => 'Roses', 'quantity' => 22, 'unit_price' => 2.50, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 10]);
+    // Tulips: total 4, below threshold 8.
+    InventoryItem::create(['flower_type' => 'Tulips', 'quantity' => 4, 'unit_price' => 1.80, 'date_received' => today(), 'shelf_life_days' => 7, 'low_stock_threshold' => 8]);
+
+    $this->actingAs($user)->get(route($page))
+        ->assertSeeInOrder(['Flowers in stock', '2', 'Low-stock alerts', '1', 'Spoilage alerts', '0'])
+        ->assertSeeInOrder(['Low stock', 'Tulips', '4 remaining'])
+        ->assertSee('Nothing is close to spoiling.');
+})->with([
+    'staff' => ['staff', 'dashboard'],
+    'admin' => ['admin', 'admin.dashboard'],
+]);

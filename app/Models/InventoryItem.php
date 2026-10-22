@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection as SupportCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -14,6 +16,82 @@ use Illuminate\Validation\ValidationException;
 class InventoryItem extends Model
 {
     public const WASTAGE_REASONS = ['expired', 'damaged', 'other'];
+
+    /**
+     * One summary per flower across all its batches. The inventory page and both dashboards use this,
+     * so their totals, low-stock, and spoilage figures always agree.
+     *
+     * @param  Collection<int, InventoryItem>|null  $batches
+     * @return SupportCollection<string, array{flower_type: string, batches: Collection<int, InventoryItem>, total: int, is_low_stock: bool, has_spoilage_alert: bool, sell_first_id: ?int, reorder_query: array{flower: string, supplier: ?int}, latest_received: Carbon, earliest_spoilage: Carbon, newest: InventoryItem, soonest_spoiling: ?InventoryItem}>
+     */
+    public static function flowerSummaries(?Collection $batches = null): SupportCollection
+    {
+        return ($batches ?? static::query()->get())
+            ->groupBy(fn (InventoryItem $batch): string => strtolower($batch->flower_type))
+            ->map(fn (Collection $flowerBatches): array => static::summarizeFlower($flowerBatches))
+            ->toBase();
+    }
+
+    /**
+     * Batches in the order customer orders use them (soonest to spoil, then first added), plus the flower's
+     * total stock, whether it is low (total at or below the newest batch's threshold), and whether a batch
+     * still in stock is close to spoiling.
+     *
+     * @param  Collection<int, InventoryItem>  $flowerBatches
+     * @return array<string, mixed>
+     */
+    private static function summarizeFlower(Collection $flowerBatches): array
+    {
+        $batches = $flowerBatches->sortBy([
+            fn (InventoryItem $a, InventoryItem $b): int => $a->spoilageDate() <=> $b->spoilageDate(),
+            fn (InventoryItem $a, InventoryItem $b): int => $a->id <=> $b->id,
+        ])->values();
+        $stocked = $batches->filter(fn (InventoryItem $batch): bool => $batch->quantity > 0);
+        $newest = $batches->sortBy([['date_received', 'desc'], ['id', 'desc']])->first();
+        $total = (int) $batches->sum('quantity');
+
+        return [
+            'flower_type' => $newest->flower_type,
+            'batches' => $batches,
+            'total' => $total,
+            'is_low_stock' => $total <= $newest->low_stock_threshold,
+            'has_spoilage_alert' => $stocked->contains(fn (InventoryItem $batch): bool => $batch->isNearSpoilage()),
+            'sell_first_id' => $stocked->count() > 1 ? $stocked->first()->id : null,
+            'reorder_query' => $newest->reorderQuery(),
+            'latest_received' => $newest->date_received,
+            'earliest_spoilage' => ($stocked->first() ?? $batches->first())->spoilageDate(),
+            'newest' => $newest,
+            'soonest_spoiling' => $stocked->first(fn (InventoryItem $batch): bool => $batch->isNearSpoilage()),
+        ];
+    }
+
+    /**
+     * Stock figures for the dashboards, counted per flower like the inventory page.
+     *
+     * @return array{flowersInStock: int, lowStockAlerts: int, spoilageAlerts: int, lowStockItems: SupportCollection<int, InventoryItem>, spoilageItems: SupportCollection<int, InventoryItem>}
+     */
+    public static function dashboardSummary(int $listLimit = 5): array
+    {
+        $flowers = static::flowerSummaries();
+        $lowStock = $flowers->where('is_low_stock', true)->sortBy('total');
+        $spoiling = $flowers->where('has_spoilage_alert', true)->sortBy(fn (array $flower): int => $flower['soonest_spoiling']->spoilageDate()->timestamp);
+
+        return [
+            'flowersInStock' => $flowers->where('total', '>', 0)->count(),
+            'lowStockAlerts' => $lowStock->count(),
+            'spoilageAlerts' => $spoiling->count(),
+            'lowStockItems' => $lowStock->take($listLimit)->map(fn (array $flower): self => $flower['newest']->asFlowerTotal($flower['total']))->values(),
+            'spoilageItems' => $spoiling->take($listLimit)->map(fn (array $flower): self => $flower['soonest_spoiling'])->values(),
+        ];
+    }
+
+    /**
+     * An unsaved copy of this batch carrying the whole flower's stock, for alert lists that show one row per flower.
+     */
+    public function asFlowerTotal(int $total): self
+    {
+        return $this->replicate()->forceFill(['quantity' => $total]);
+    }
 
     public function adjustments(): HasMany
     {

@@ -68,17 +68,17 @@ class StaffDashboardController extends Controller
      */
     private function workspaceSummary(): array
     {
-        $inventoryItems = InventoryItem::query()->get();
+        $stock = InventoryItem::dashboardSummary();
 
         return [
-            'totalStockItems' => $inventoryItems->count(),
-            'lowStockAlerts' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock())->count(),
-            'spoilageAlerts' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isNearSpoilage())->count(),
+            'totalStockItems' => $stock['flowersInStock'],
+            'lowStockAlerts' => $stock['lowStockAlerts'],
+            'spoilageAlerts' => $stock['spoilageAlerts'],
             'pendingOrders' => CustomerOrder::query()->where('status', 'pending')->count(),
             'collectionsToday' => CustomerOrder::query()->whereIn('status', ['pending', 'ready'])->whereDate('collection_date', today())->count(),
             'recentOrders' => CustomerOrder::query()->with('items')->latest()->limit(5)->get(),
-            'lowStockItems' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isLowStock())->sortBy('quantity')->take(5)->values(),
-            'spoilageItems' => $inventoryItems->filter(fn (InventoryItem $item): bool => $item->isNearSpoilage())->sortBy(fn (InventoryItem $item): int => $item->spoilageDate()->timestamp)->take(5)->values(),
+            'lowStockItems' => $stock['lowStockItems'],
+            'spoilageItems' => $stock['spoilageItems'],
         ];
     }
 }

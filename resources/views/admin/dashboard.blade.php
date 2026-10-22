@@ -22,16 +22,19 @@
                 </header>
 
                 <x-dashboard.stats class="mt-6" :stats="[
-                    ['label' => 'Total stock items', 'value' => $totalStockItems, 'note' => 'Flower stock on hand', 'tone' => 'text-[#203d37]'],
-                    ['label' => 'Low-stock alerts', 'value' => $lowStockAlerts, 'note' => 'Items below threshold', 'tone' => 'text-[#d47f2a]'],
-                    ['label' => 'Spoilage alerts', 'value' => $spoilageAlerts, 'note' => 'Approaching expiry', 'tone' => 'text-[#d5533d]'],
+                    ['label' => 'Flowers in stock', 'value' => $totalStockItems, 'note' => 'Flower types with stock on hand', 'tone' => 'text-[#203d37]'],
+                    ['label' => 'Low-stock alerts', 'value' => $lowStockAlerts, 'note' => 'Flowers at or below threshold', 'tone' => 'text-[#d47f2a]'],
+                    ['label' => 'Spoilage alerts', 'value' => $spoilageAlerts, 'note' => 'Flowers spoiling within 2 days', 'tone' => 'text-[#d5533d]'],
                     ['label' => 'Pending orders', 'value' => $pendingOrders, 'note' => 'Awaiting fulfilment', 'tone' => 'text-[#285443]'],
                     ['label' => 'Pending purchase orders', 'value' => $pendingPurchaseOrders, 'note' => 'Waiting on suppliers', 'tone' => 'text-[#1c9b5f]'],
                 ]" />
 
                 <div class="mt-6 grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
                     <x-dashboard.recent-orders :orders="$recentOrders" :view-all-url="route('admin.orders')" />
-                    <x-dashboard.quick-alerts :alerts="$recentInventoryAlerts" />
+                    <div class="min-w-0 space-y-6">
+                        <x-dashboard.quick-alerts title="Low stock" type="low-stock" :alerts="$lowStockItems" :view-all-url="route('admin.inventory', ['alert' => 'low_stock'])" empty-message="Every flower is above its low-stock threshold." />
+                        <x-dashboard.quick-alerts title="Spoilage alerts" type="spoilage" :alerts="$spoilageItems" :view-all-url="route('admin.inventory', ['alert' => 'spoilage'])" empty-message="Nothing is close to spoiling." />
+                    </div>
                 </div>
 
                 <section class="bk-card mt-6">
