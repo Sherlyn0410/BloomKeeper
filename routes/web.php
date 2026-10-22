@@ -64,9 +64,9 @@ Route::middleware('auth')->group(function () use ($sharedOperationsRoutes): void
         return redirect()->route('dashboard');
     })->middleware('signed')->name('verification.verify');
     Route::post('/email/verification-notification', function (Request $request): RedirectResponse {
-        $request->user()->sendEmailVerificationNotification();
-
-        return back()->with('status', 'A verification link has been sent to your email address.');
+        return back()->with('status', $request->user()->trySendingVerificationEmail()
+            ? 'A verification link has been sent to your email address.'
+            : "We couldn't send the verification email just now. Please try again in a moment.");
     })->middleware('throttle:6,1')->name('verification.send');
     Route::get('/dashboard', StaffDashboardController::class)->name('dashboard');
     Route::get('/workspace', function (): Response|RedirectResponse {

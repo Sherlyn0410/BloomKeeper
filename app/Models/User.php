@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 #[Fillable(['name', 'email', 'role', 'approval_status', 'password'])]
 #[Hidden(['password', 'remember_token'])]
@@ -22,6 +23,23 @@ class User extends Authenticatable implements MustVerifyEmail
         'role' => 'staff',
         'approval_status' => 'approved',
     ];
+
+    /**
+     * Send the verification email without letting a slow or unreachable mail server break the page.
+     * Returns false when the email could not be sent, so the page can ask the user to resend it.
+     */
+    public function trySendingVerificationEmail(): bool
+    {
+        try {
+            $this->sendEmailVerificationNotification();
+
+            return true;
+        } catch (TransportExceptionInterface $exception) {
+            report($exception);
+
+            return false;
+        }
+    }
 
     /**
      * Messages from other people that this user hasn't opened yet, across every conversation.

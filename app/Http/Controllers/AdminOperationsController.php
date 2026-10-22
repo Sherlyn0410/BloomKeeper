@@ -44,44 +44,24 @@ class AdminOperationsController extends Controller
             ->when($request->filled('search'), fn ($query) => $query->where('flower_type', 'like', '%'.$request->string('search').'%'))
             ->orderBy('id')->get();
 
+        $flowerGroups = InventoryItem::flowerSummaries($batches);
+        $alert = in_array($request->query('alert'), ['low_stock', 'spoilage'], true) ? $request->query('alert') : null;
+
         return view('admin.inventory', [
-            'flowerGroups' => $batches->groupBy(fn (InventoryItem $batch): string => strtolower($batch->flower_type))
-                ->map(fn (Collection $flowerBatches): array => $this->flowerGroup($flowerBatches))
+            'flowerGroups' => $flowerGroups
+                ->when($alert === 'low_stock', fn ($groups) => $groups->where('is_low_stock', true))
+                ->when($alert === 'spoilage', fn ($groups) => $groups->where('has_spoilage_alert', true))
                 ->sortBy($sortableColumns[$sort], SORT_REGULAR, $direction === 'desc')
                 ->values(),
+            'alert' => $alert,
+            'alertCounts' => [
+                'low_stock' => $flowerGroups->where('is_low_stock', true)->count(),
+                'spoilage' => $flowerGroups->where('has_spoilage_alert', true)->count(),
+            ],
             'suppliers' => $this->approvedSuppliers(),
             'sort' => $sort,
             'direction' => $direction,
         ]);
-    }
-
-    /**
-     * One flower's batches in the order customer orders use them (soonest to spoil, then first added),
-     * with the flower's total stock and which batch is used next.
-     *
-     * @param  Collection<int, InventoryItem>  $flowerBatches
-     * @return array{flower_type: string, batches: Collection<int, InventoryItem>, total: int, is_low_stock: bool, sell_first_id: ?int, reorder_query: array{flower: string, supplier: ?int}, latest_received: Carbon, earliest_spoilage: Carbon}
-     */
-    private function flowerGroup(Collection $flowerBatches): array
-    {
-        $batches = $flowerBatches->sortBy([
-            fn (InventoryItem $a, InventoryItem $b): int => $a->spoilageDate() <=> $b->spoilageDate(),
-            fn (InventoryItem $a, InventoryItem $b): int => $a->id <=> $b->id,
-        ])->values();
-        $stocked = $batches->filter(fn (InventoryItem $batch): bool => $batch->quantity > 0);
-        $newest = $batches->sortBy([['date_received', 'desc'], ['id', 'desc']])->first();
-        $total = (int) $batches->sum('quantity');
-
-        return [
-            'flower_type' => $newest->flower_type,
-            'batches' => $batches,
-            'total' => $total,
-            'is_low_stock' => $total <= $newest->low_stock_threshold,
-            'sell_first_id' => $stocked->count() > 1 ? $stocked->first()->id : null,
-            'reorder_query' => $newest->reorderQuery(),
-            'latest_received' => $newest->date_received,
-            'earliest_spoilage' => ($stocked->first() ?? $batches->first())->spoilageDate(),
-        ];
     }
 
     public function orders(Request $request): View

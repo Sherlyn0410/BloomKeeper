@@ -6,6 +6,7 @@ use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
+use Symfony\Component\Mailer\Exception\TransportException;
 
 test('a guest can view the login and signup pages', function () {
     $this->get(route('login'))
@@ -272,4 +273,28 @@ test('suppliers are not sent to a staff page after signing in', function () {
 
     $this->post(route('login.store'), ['email' => 'supplier@example.com', 'password' => 'password'])
         ->assertRedirect(route('dashboard'));
+});
+
+test('sign up still completes when the verification email cannot be sent', function () {
+    Notification::shouldReceive('send')->once()->andThrow(new TransportException('Mail server timed out'));
+
+    $this->post(route('register.store'), [
+        'name' => 'Nadia Florist',
+        'email' => 'nadia@example.com',
+        'role' => 'staff',
+        'password' => 'password123',
+        'password_confirmation' => 'password123',
+    ])->assertRedirect(route('verification.notice'))
+        ->assertSessionHas('status', "Your account was created, but we couldn't send the verification email just now. Please use Resend verification email.");
+
+    expect(User::where('email', 'nadia@example.com')->exists())->toBeTrue();
+});
+
+test('resending the verification email reports a failure instead of crashing', function () {
+    $user = User::factory()->unverified()->create();
+    Notification::shouldReceive('send')->once()->andThrow(new TransportException('Mail server timed out'));
+
+    $this->actingAs($user)->post(route('verification.send'))
+        ->assertRedirect()
+        ->assertSessionHas('status', "We couldn't send the verification email just now. Please try again in a moment.");
 });

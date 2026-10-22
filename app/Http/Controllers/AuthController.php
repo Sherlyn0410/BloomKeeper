@@ -69,9 +69,10 @@ class AuthController extends Controller
         ]);
 
         Auth::login($user);
-        $user->sendEmailVerificationNotification();
 
-        return redirect()->route('verification.notice')->with('status', 'Verify your email while your account waits for administrator approval.');
+        return redirect()->route('verification.notice')->with('status', $user->trySendingVerificationEmail()
+            ? 'Verify your email while your account waits for administrator approval.'
+            : "Your account was created, but we couldn't send the verification email just now. Please use Resend verification email.");
     }
 
     public function logout(Request $request): RedirectResponse
