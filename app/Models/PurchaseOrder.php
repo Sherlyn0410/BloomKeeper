@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['created_by', 'supplier_id', 'supplier_name', 'requested_date', 'status', 'notes', 'supplier_note', 'fulfilled_at', 'received_quantity'])]
+#[Fillable(['created_by', 'supplier_id', 'supplier_name', 'requested_date', 'status', 'notes', 'supplier_note', 'fulfilled_at', 'received_quantity', 'follow_up_of_id'])]
 class PurchaseOrder extends Model
 {
     /**
@@ -38,7 +38,8 @@ class PurchaseOrder extends Model
     }
 
     /**
-     * Details can change until the supplier delivers; editing a declined order sends it to them again.
+     * Details and status can change until the supplier delivers or the order is cancelled; editing a declined order sends it to them again.
+     * Cancelling is final, so a cancelled order is never sent to the supplier again.
      */
     public function canBeEdited(): bool
     {
@@ -66,6 +67,36 @@ class PurchaseOrder extends Model
     public function receivedDifference(): ?int
     {
         return $this->received_quantity === null ? null : $this->received_quantity - $this->orderedQuantity();
+    }
+
+    /**
+     * How many stems of a short delivery still need re-ordering: the shortfall minus what follow-up
+     * purchase orders already ask for. Cancelled follow-ups no longer count, so their stems can be re-ordered again.
+     */
+    public function missingQuantity(?self $ignoring = null): int
+    {
+        $shortfall = -min(0, $this->receivedDifference() ?? 0);
+        $reordered = $this->followUps
+            ->reject(fn (self $followUp): bool => $followUp->status === 'cancelled' || $followUp->is($ignoring))
+            ->sum(fn (self $followUp): int => $followUp->orderedQuantity());
+
+        return max(0, $shortfall - $reordered);
+    }
+
+    /**
+     * The short delivery this purchase order re-orders the missing stems for.
+     */
+    public function followUpOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'follow_up_of_id');
+    }
+
+    /**
+     * Purchase orders created to re-order stems missing from this delivery.
+     */
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(self::class, 'follow_up_of_id');
     }
 
     /**

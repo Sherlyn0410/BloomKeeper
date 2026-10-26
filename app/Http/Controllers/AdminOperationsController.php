@@ -12,9 +12,11 @@ use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -98,7 +100,7 @@ class AdminOperationsController extends Controller
         $statusCounts = (clone $purchaseOrders)->select('status', DB::raw('COUNT(*) as total'))->groupBy('status')->pluck('total', 'status');
 
         return view('admin.purchase-orders', [
-            'purchaseOrders' => $purchaseOrders->with(['items', 'creator', 'receivedBatch'])
+            'purchaseOrders' => $purchaseOrders->with(['items', 'creator', 'receivedBatch', 'followUps.items', 'followUpOf.items', 'followUpOf.followUps.items'])
                 ->when(in_array($request->query('status'), PurchaseOrder::STATUSES, true), fn ($query) => $query->where('status', $request->query('status')))
                 ->latest()
                 ->get(),
@@ -111,13 +113,13 @@ class AdminOperationsController extends Controller
     }
 
     /**
-     * The purchase order being followed up with a re-order, only when its delivery actually arrived short.
+     * The purchase order being followed up with a re-order, only while some of its short delivery is still not re-ordered.
      */
     private function shortPurchaseOrder(int $purchaseOrderId): ?PurchaseOrder
     {
-        $purchaseOrder = $purchaseOrderId ? PurchaseOrder::query()->with(['items', 'receivedBatch'])->find($purchaseOrderId) : null;
+        $purchaseOrder = $purchaseOrderId ? PurchaseOrder::query()->with(['items', 'receivedBatch', 'followUps.items'])->find($purchaseOrderId) : null;
 
-        return $purchaseOrder?->receivedDifference() < 0 ? $purchaseOrder : null;
+        return $purchaseOrder?->missingQuantity() > 0 ? $purchaseOrder : null;
     }
 
     public function wastage(Request $request): View
@@ -217,7 +219,7 @@ class AdminOperationsController extends Controller
         $wasDeclined = $purchaseOrder->status === 'declined';
 
         DB::transaction(function () use ($purchaseOrder, $data): void {
-            $purchaseOrder->update([...$data, 'status' => 'sent', 'supplier_note' => null]);
+            $purchaseOrder->update([...Arr::except($data, 'follow_up_of_id'), 'status' => 'sent', 'supplier_note' => null]);
             $purchaseOrder->items()->delete();
             $purchaseOrder->items()->create(['flower_type' => $data['flower_type'], 'quantity' => $data['quantity']]);
         });
@@ -229,8 +231,9 @@ class AdminOperationsController extends Controller
 
     /**
      * The requested date must be today or later, but an existing order may keep the date it already has.
+     * A re-order of a short delivery stays on the same flower and can only ask for the stems still missing.
      *
-     * @return array{supplier_id: int, supplier_name: string, requested_date: string, flower_type: string, quantity: int, notes: ?string}
+     * @return array{supplier_id: int, supplier_name: string, requested_date: string, flower_type: string, quantity: int, notes: ?string, follow_up_of_id?: ?int}
      */
     private function validatePurchaseOrder(Request $request, ?PurchaseOrder $purchaseOrder = null): array
     {
@@ -246,9 +249,30 @@ class AdminOperationsController extends Controller
             }],
             'flower_type' => ['required', 'string', 'max:100'], 'quantity' => ['required', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'follow_up_of_id' => ['nullable', 'integer', Rule::exists('purchase_orders', 'id')],
         ], [
             'supplier_id.required' => 'Choose the supplier to send this purchase order to.',
         ]);
+
+        $shortDelivery = PurchaseOrder::query()->with(['items', 'followUps.items'])
+            ->find($purchaseOrder?->follow_up_of_id ?? ($purchaseOrder ? null : ($data['follow_up_of_id'] ?? null)));
+
+        if ($shortDelivery) {
+            $missingQuantity = $shortDelivery->missingQuantity($purchaseOrder);
+            $missingFlower = $shortDelivery->items->first()?->flower_type;
+
+            if ($missingQuantity === 0) {
+                throw ValidationException::withMessages(['quantity' => "The missing stock from {$shortDelivery->reference()} has already been re-ordered."]);
+            }
+
+            if (strcasecmp($data['flower_type'], (string) $missingFlower) !== 0) {
+                throw ValidationException::withMessages(['flower_type' => "This re-order must be for {$missingFlower}."]);
+            }
+
+            if ($data['quantity'] > $missingQuantity) {
+                throw ValidationException::withMessages(['quantity' => "Only {$missingQuantity} {$missingFlower} are missing from {$shortDelivery->reference()}."]);
+            }
+        }
 
         $data['supplier_name'] = User::query()->findOrFail($data['supplier_id'])->name;
 

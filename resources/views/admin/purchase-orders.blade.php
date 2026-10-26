@@ -6,10 +6,11 @@
     $failedReceiveId = (int) old('receiving_purchase_order');
     // A Reorder link from a low-stock alert pre-fills the create form.
     $reorder = array_filter(['supplier_id' => request('supplier'), 'flower_type' => request('flower')]);
-    // "Re-order missing" on a short delivery pre-fills the same supplier, flower, and missing quantity.
+    // "Re-order missing" on a short delivery pre-fills the same supplier, flower, and the quantity still missing.
     if ($followUpOf) {
-        $missingQuantity = abs($followUpOf->receivedDifference());
+        $missingQuantity = $followUpOf->missingQuantity();
         $reorder = [
+            'follow_up_of_id' => $followUpOf->id,
             'supplier_id' => $followUpOf->supplier_id,
             'flower_type' => $followUpOf->items->first()?->flower_type,
             'quantity' => $missingQuantity,
@@ -38,6 +39,9 @@
         @endif
         <form method="POST" action="{{ route($area.'.purchase-orders.store') }}" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1.5fr]">
             @csrf
+            @if ($createOld('follow_up_of_id'))
+                <input type="hidden" name="follow_up_of_id" value="{{ $createOld('follow_up_of_id') }}">
+            @endif
             <label class="bk-label">
                 Supplier
                 <select name="supplier_id" required class="bk-input">
@@ -53,7 +57,7 @@
             </label>
             <label class="bk-label">
                 Quantity
-                <input name="quantity" value="{{ $createOld('quantity') }}" type="number" min="1" required class="bk-input">
+                <input name="quantity" value="{{ $createOld('quantity') }}" type="number" min="1" @if ($followUpOf) max="{{ $missingQuantity }}" @endif required class="bk-input">
             </label>
             <label class="bk-label">
                 Requested date
@@ -211,8 +215,10 @@
                                     Receive into stock
                                 </button>
                             @elseif ($purchaseOrder->isLocked())
-                                @if ($receivedDifference < 0)
-                                    <a href="{{ route($area.'.purchase-orders', ['follow_up' => $purchaseOrder->id]) }}#create-purchase-order" class="bk-btn bk-btn-accent bk-btn-sm h-8">Re-order missing {{ abs($receivedDifference) }}</a>
+                                @if ($purchaseOrder->missingQuantity() > 0)
+                                    <a href="{{ route($area.'.purchase-orders', ['follow_up' => $purchaseOrder->id]) }}#create-purchase-order" class="bk-btn bk-btn-accent bk-btn-sm h-8">Re-order missing {{ $purchaseOrder->missingQuantity() }}</a>
+                                @elseif ($receivedDifference < 0)
+                                    <span class="text-xs font-semibold text-[#607a72]">Missing stock re-ordered in {{ $purchaseOrder->followUps->reject(fn ($followUp) => $followUp->status === 'cancelled')->map->reference()->join(', ') }}</span>
                                 @endif
                                 <span class="inline-flex h-8 shrink-0 items-center gap-1 text-xs font-semibold text-[#8aa39c]" title="Fulfilled orders have been delivered and can't be changed">
                                     <svg class="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clip-rule="evenodd" /></svg>
@@ -228,7 +234,7 @@
                                             <option value="declined" selected disabled>Declined</option>
                                         @endif
                                         <option value="sent" @selected($purchaseOrder->status === 'sent')>{{ $purchaseOrder->status === 'declined' ? 'Re-send' : 'Sent' }}</option>
-                                        <option value="cancelled" @selected($purchaseOrder->status === 'cancelled')>Cancelled</option>
+                                        <option value="cancelled">Cancelled</option>
                                     </select>
                                 </form>
                             @endif
@@ -316,6 +322,7 @@
                             $isFailedEdit = $failedEditId === $purchaseOrder->id;
                             $editValue = fn (string $key, mixed $current): mixed => $isFailedEdit ? old($key) : $current;
                             $firstItem = $purchaseOrder->items->first();
+                            $editMaxQuantity = $purchaseOrder->followUpOf?->missingQuantity($purchaseOrder);
                         @endphp
                         <dialog
                             id="edit-po-{{ $purchaseOrder->id }}"
@@ -358,7 +365,7 @@
                                     </label>
                                     <label class="bk-label">
                                         Quantity
-                                        <input name="quantity" value="{{ $editValue('quantity', $firstItem?->quantity) }}" type="number" min="1" required class="bk-input">
+                                        <input name="quantity" value="{{ $editValue('quantity', $firstItem?->quantity) }}" type="number" min="1" @if ($editMaxQuantity) max="{{ $editMaxQuantity }}" @endif required class="bk-input">
                                     </label>
                                     <label class="bk-label sm:col-span-2">
                                         Requested date

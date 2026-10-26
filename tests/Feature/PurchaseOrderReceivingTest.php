@@ -166,3 +166,52 @@ test('complete deliveries have no re-order button and cannot be followed up', fu
         ->assertDontSee('Re-ordering the')
         ->assertDontSee('name="quantity" value="50"', false);
 });
+
+function followUpPayload(PurchaseOrder $shortDelivery, int $quantity): array
+{
+    return [
+        'supplier_id' => $shortDelivery->supplier_id, 'flower_type' => 'Roses', 'quantity' => $quantity,
+        'requested_date' => today()->addDay()->format('Y-m-d'), 'follow_up_of_id' => $shortDelivery->id,
+    ];
+}
+
+test('missing stock can only be re-ordered once', function () {
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.receive', $this->purchaseOrder), receivePayload(['quantity' => 40]));
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.store'), followUpPayload($this->purchaseOrder, 10))->assertSessionHasNoErrors();
+    $followUp = PurchaseOrder::query()->latest('id')->first();
+
+    expect($followUp->follow_up_of_id)->toBe($this->purchaseOrder->id);
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders'))
+        ->assertDontSee('Re-order missing')
+        ->assertSee('Missing stock re-ordered in '.$followUp->reference());
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders', ['follow_up' => $this->purchaseOrder->id]))->assertDontSee('Re-ordering the');
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.store'), followUpPayload($this->purchaseOrder, 10))
+        ->assertSessionHasErrors(['quantity' => 'The missing stock from PO-0001 has already been re-ordered.']);
+});
+
+test('a re-order cannot ask for more than the missing quantity', function () {
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.receive', $this->purchaseOrder), receivePayload(['quantity' => 40]));
+
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.store'), followUpPayload($this->purchaseOrder, 200))
+        ->assertSessionHasErrors(['quantity' => 'Only 10 Roses are missing from PO-0001.']);
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.store'), [...followUpPayload($this->purchaseOrder, 5), 'flower_type' => 'Tulips'])
+        ->assertSessionHasErrors(['flower_type' => 'This re-order must be for Roses.']);
+
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.store'), followUpPayload($this->purchaseOrder, 6))->assertSessionHasNoErrors();
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders'))->assertSee('Re-order missing 4');
+
+    $followUp = PurchaseOrder::query()->latest('id')->first();
+    $this->actingAs($this->staff)->put(route('staff.purchase-orders.update', $followUp), [...followUpPayload($this->purchaseOrder, 11), 'follow_up_of_id' => null])
+        ->assertSessionHasErrors(['quantity' => 'Only 10 Roses are missing from PO-0001.']);
+    $this->actingAs($this->staff)->put(route('staff.purchase-orders.update', $followUp), followUpPayload($this->purchaseOrder, 10))->assertSessionHasNoErrors();
+});
+
+test('cancelling a re-order lets the missing stock be re-ordered again', function () {
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.receive', $this->purchaseOrder), receivePayload(['quantity' => 40]));
+    $this->actingAs($this->staff)->post(route('staff.purchase-orders.store'), followUpPayload($this->purchaseOrder, 10));
+    $followUp = PurchaseOrder::query()->latest('id')->first();
+
+    $this->actingAs($this->staff)->patch(route('staff.purchase-orders.status', $followUp), ['status' => 'cancelled'])->assertSessionHasNoErrors();
+
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders'))->assertSee('Re-order missing 10');
+});
