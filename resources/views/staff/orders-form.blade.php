@@ -143,7 +143,9 @@
 
             <section class="bk-card">
                 <h2 class="bk-card-title">Summary</h2>
-                <dl class="mt-3 space-y-1.5 text-sm">
+                <ul id="summary-lines" class="mt-3 space-y-2 text-sm"></ul>
+                <p id="summary-empty" class="mt-3 text-sm text-[#8aa39c]">No flowers added yet.</p>
+                <dl class="mt-3 space-y-1.5 border-t border-[#e3eeeb] pt-3 text-sm">
                     <div class="flex justify-between text-[#607a72]">
                         <dt>Stems</dt>
                         <dd id="summary-stems">0</dd>
@@ -199,6 +201,7 @@
             const updateSummary = () => {
                 let stems = 0;
                 let total = 0;
+                const lines = [];
 
                 itemRows.querySelectorAll('.item-row').forEach((row) => {
                     const select = row.querySelector('select');
@@ -209,7 +212,32 @@
                     row.querySelector('[data-line-total]').textContent = money(lineTotal);
                     stems += select.value ? quantity : 0;
                     total += lineTotal;
+
+                    if (select.value && quantity > 0) {
+                        lines.push({ flower: select.value, price, quantity, lineTotal });
+                    }
                 });
+
+                const summaryLines = document.getElementById('summary-lines');
+                summaryLines.replaceChildren(...lines.map(({ flower, price, quantity, lineTotal }) => {
+                    const item = document.createElement('li');
+                    item.className = 'flex items-start justify-between gap-3';
+                    const details = document.createElement('div');
+                    const name = document.createElement('p');
+                    name.className = 'font-semibold text-[#1c2e28]';
+                    name.textContent = flower;
+                    const breakdown = document.createElement('p');
+                    breakdown.className = 'text-xs text-[#607a72] tabular-nums';
+                    breakdown.textContent = `${money(price)} × ${quantity}`;
+                    const amount = document.createElement('span');
+                    amount.className = 'font-semibold text-[#1c2e28] tabular-nums';
+                    amount.textContent = money(lineTotal);
+                    details.append(name, breakdown);
+                    item.append(details, amount);
+
+                    return item;
+                }));
+                document.getElementById('summary-empty').hidden = lines.length > 0;
 
                 document.getElementById('summary-stems').textContent = stems;
                 document.getElementById('summary-total').textContent = money(total);
