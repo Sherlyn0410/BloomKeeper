@@ -223,3 +223,17 @@ test('filtered lists are marked so the page opens at them', function (string $ro
     'stock returns' => ['staff.stock-returns', 'status'],
     'wastage' => ['staff.wastage.create', 'sort,direction'],
 ]);
+
+test('a cancelled purchase order cannot be sent to the supplier again', function (string $role) {
+    $user = $role === 'admin' ? User::factory()->create(['role' => 'admin']) : $this->staff;
+    $purchaseOrder = staffPurchaseOrder($user, $this->supplier, 'declined');
+    $area = $role === 'admin' ? 'admin' : 'staff';
+
+    $this->actingAs($user)->patch(route("{$area}.purchase-orders.status", $purchaseOrder), ['status' => 'cancelled'])->assertSessionHasNoErrors();
+
+    $this->actingAs($user)->get(route("{$area}.purchase-orders"))->assertDontSee(route("{$area}.purchase-orders.status", $purchaseOrder));
+    $this->actingAs($user)->patch(route("{$area}.purchase-orders.status", $purchaseOrder), ['status' => 'sent'])->assertForbidden();
+    $this->actingAs($this->supplier)->patch(route('supplier.purchase-orders.fulfill', $purchaseOrder))->assertForbidden();
+
+    expect($purchaseOrder->refresh()->status)->toBe('cancelled');
+})->with(['admin', 'staff']);
