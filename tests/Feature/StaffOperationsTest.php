@@ -108,12 +108,28 @@ test('staff can cancel and re-send their own purchase orders', function () {
         ->and($declined->refresh()->status)->toBe('sent');
 });
 
+test('staff can edit their own purchase orders before the supplier fulfils them', function () {
+    $purchaseOrder = staffPurchaseOrder($this->staff, $this->supplier);
+    $purchaseOrder->items()->create(['flower_type' => 'Roses', 'quantity' => 40]);
+
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders'))->assertSee(route('staff.purchase-orders.update', $purchaseOrder));
+    $this->actingAs($this->staff)->put(route('staff.purchase-orders.update', $purchaseOrder), [
+        'supplier_id' => $this->supplier->id, 'requested_date' => today()->addDays(4)->format('Y-m-d'), 'flower_type' => 'Tulips', 'quantity' => 25,
+    ])->assertSessionHasNoErrors();
+
+    expect($purchaseOrder->items()->sole()->only(['flower_type', 'quantity']))->toBe(['flower_type' => 'Tulips', 'quantity' => 25]);
+});
+
 test('staff cannot change purchase orders created by someone else', function () {
     $admin = User::factory()->create(['role' => 'admin']);
     $purchaseOrder = staffPurchaseOrder($admin, $this->supplier);
 
     $this->actingAs($this->staff)->get(route('staff.purchase-orders'))->assertDontSee(route('staff.purchase-orders.status', $purchaseOrder));
+    $this->actingAs($this->staff)->get(route('staff.purchase-orders'))->assertDontSee(route('staff.purchase-orders.update', $purchaseOrder));
     $this->actingAs($this->staff)->patch(route('staff.purchase-orders.status', $purchaseOrder), ['status' => 'cancelled'])->assertForbidden();
+    $this->actingAs($this->staff)->put(route('staff.purchase-orders.update', $purchaseOrder), [
+        'supplier_id' => $this->supplier->id, 'requested_date' => today()->addDays(4)->format('Y-m-d'), 'flower_type' => 'Tulips', 'quantity' => 25,
+    ])->assertForbidden();
 
     expect($purchaseOrder->refresh()->status)->toBe('sent');
 });
@@ -168,6 +184,7 @@ dataset('staff operation requests', [
     'delete stock' => ['delete', 'staff.inventory.destroy', 'stock'],
     'purchase orders' => ['get', 'staff.purchase-orders', null],
     'create purchase order' => ['post', 'staff.purchase-orders.store', null],
+    'edit purchase order' => ['put', 'staff.purchase-orders.update', 'purchase-order'],
     'purchase order status' => ['patch', 'staff.purchase-orders.status', 'purchase-order'],
     'order status' => ['patch', 'staff.orders.status', 'order'],
     'mark order paid' => ['patch', 'staff.orders.paid', 'order'],

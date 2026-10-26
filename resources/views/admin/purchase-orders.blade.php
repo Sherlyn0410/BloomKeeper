@@ -323,7 +323,7 @@
                             @if ($isFailedEdit) data-open-on-load @endif
                             class="fixed left-1/2 top-1/2 m-0 max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[24px] bg-white p-0 backdrop:bg-[#1c2e28]/40"
                         >
-                            <form method="POST" action="{{ route('admin.purchase-orders.update', $purchaseOrder) }}" class="max-h-[calc(100vh-2rem)] overflow-y-auto p-6 sm:p-8">
+                            <form method="POST" action="{{ route($area.'.purchase-orders.update', $purchaseOrder) }}" class="max-h-[calc(100vh-2rem)] overflow-y-auto p-6 sm:p-8">
                                 @csrf
                                 @method('PUT')
                                 <input type="hidden" name="editing_purchase_order" value="{{ $purchaseOrder->id }}">

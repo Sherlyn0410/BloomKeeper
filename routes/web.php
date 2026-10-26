@@ -40,6 +40,7 @@ $sharedOperationsRoutes = function (): void {
     Route::patch('/orders/{customerOrder}/status', [AdminOperationsController::class, 'updateOrderStatus'])->middleware('can:update-order,customerOrder')->name('orders.status');
     Route::patch('/orders/{customerOrder}/paid', [AdminOperationsController::class, 'markOrderPaid'])->middleware('can:mark-order-paid,customerOrder')->name('orders.paid');
     Route::post('/purchase-orders', [AdminOperationsController::class, 'storePurchaseOrder'])->name('purchase-orders.store');
+    Route::put('/purchase-orders/{purchaseOrder}', [AdminOperationsController::class, 'updatePurchaseOrder'])->middleware('can:edit-purchase-order,purchaseOrder')->name('purchase-orders.update');
     Route::patch('/purchase-orders/{purchaseOrder}/status', [AdminOperationsController::class, 'updatePurchaseOrderStatus'])->middleware('can:update-purchase-order,purchaseOrder')->name('purchase-orders.status');
 };
 
@@ -135,7 +136,6 @@ Route::middleware('auth')->group(function () use ($sharedOperationsRoutes): void
         Route::get('/orders', [AdminOperationsController::class, 'orders'])->name('orders');
         Route::get('/reports', [AdminOperationsController::class, 'reports'])->name('reports');
         Route::get('/wastage', [AdminOperationsController::class, 'wastage'])->name('wastage');
-        Route::put('/purchase-orders/{purchaseOrder}', [AdminOperationsController::class, 'updatePurchaseOrder'])->middleware('can:edit-purchase-order,purchaseOrder')->name('purchase-orders.update');
         Route::get('/reports/export', [AdminOperationsController::class, 'exportReport'])->name('reports.export');
         Route::get('/reports/wastage', [AdminOperationsController::class, 'wastageReports'])->name('reports.wastage');
         Route::get('/reports/wastage/export', [AdminOperationsController::class, 'exportWastageReport'])->name('reports.wastage.export');

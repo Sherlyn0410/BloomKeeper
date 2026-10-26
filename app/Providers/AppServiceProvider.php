@@ -36,7 +36,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('delete-order', fn (User $user, CustomerOrder $order): bool => $order->canBeDeleted());
         Gate::define('mark-order-paid', fn (User $user, CustomerOrder $order): bool => $order->canBeMarkedPaid());
         Gate::define('supply-orders', fn (User $user): bool => $user->role === 'supplier' && $user->approval_status === 'approved');
-        Gate::define('edit-purchase-order', fn (User $user, PurchaseOrder $order): bool => $user->role === 'admin' && $order->canBeEdited());
+        Gate::define('edit-purchase-order', fn (User $user, PurchaseOrder $order): bool => $order->canBeEdited()
+            && ($user->role === 'admin' || $order->created_by === $user->id));
         Gate::define('update-purchase-order', fn (User $user, PurchaseOrder $order): bool => ! $order->isLocked()
             && ($user->role === 'admin' || $order->created_by === $user->id));
         Gate::define('receive-purchase-order', fn (User $user, PurchaseOrder $order): bool => $order->canBeReceived());
