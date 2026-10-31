@@ -37,6 +37,7 @@
                         <th class="pb-3">Phone</th>
                         <th class="pb-3">Email</th>
                         <th class="pb-3 text-right">Orders</th>
+                        <th class="pb-3 text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-[#dce9e6]">
@@ -46,9 +47,23 @@
                             <td class="py-3 text-[#607a72]">{{ $customer->formatted_phone ?? '-' }}</td>
                             <td class="py-3 text-[#607a72]">{{ $customer->email ?? '-' }}</td>
                             <td class="py-3 text-right font-semibold">{{ $customer->orders_count }}</td>
+                            <td class="py-3">
+                                <div class="flex items-center justify-end gap-3 whitespace-nowrap text-xs font-semibold">
+                                    <a href="{{ route('staff.customers.edit', $customer) }}" class="text-[#285443] underline underline-offset-2">Edit</a>
+                                    @if ($customer->orders_count === 0)
+                                        <form method="POST" action="{{ route('staff.customers.destroy', $customer) }}" onsubmit="return confirm(@js('Delete '.$customer->name.'? This cannot be undone.'))">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="cursor-pointer text-[#b84331] underline underline-offset-2">Delete</button>
+                                        </form>
+                                    @else
+                                        <span class="text-[#b8cfca]" title="Customers with orders cannot be deleted">Delete</span>
+                                    @endif
+                                </div>
+                            </td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="py-8 text-center text-[#607a72]">No customers saved yet.</td></tr>
+                        <tr><td colspan="5"class="py-8 text-center text-[#607a72]">No customers saved yet.</td></tr>
                     @endforelse
                 </tbody>
             </table>

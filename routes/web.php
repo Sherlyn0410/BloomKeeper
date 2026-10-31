@@ -78,6 +78,9 @@ Route::middleware('auth')->group(function () use ($sharedOperationsRoutes): void
     Route::middleware(['verified', 'can:manage-customers'])->prefix('staff')->name('staff.')->group(function () use ($sharedOperationsRoutes): void {
         Route::get('/customers', [StaffCustomerController::class, 'index'])->name('customers.index');
         Route::post('/customers', [StaffCustomerController::class, 'store'])->name('customers.store');
+        Route::get('/customers/{customer}/edit', [StaffCustomerController::class, 'edit'])->name('customers.edit');
+        Route::put('/customers/{customer}', [StaffCustomerController::class, 'update'])->name('customers.update');
+        Route::delete('/customers/{customer}', [StaffCustomerController::class, 'destroy'])->name('customers.destroy');
         Route::get('/orders', [AdminOperationsController::class, 'orders'])->name('orders.index');
         Route::get('/orders/create', [StaffOrderController::class, 'create'])->name('orders.create');
         Route::post('/orders', [StaffOrderController::class, 'store'])->name('orders.store');

@@ -64,6 +64,56 @@ test('phone numbers are stored as digits and displayed by prefix', function (str
     'eleven digits, not 011' => ['01523456789', '01523456789', '015-234 56789'],
 ]);
 
+test('staff can edit a customer without changing past orders', function () {
+    $customer = Customer::factory()->create(['name' => 'Aisha Rahman', 'phone' => '0123456789', 'email' => 'aisha@example.com']);
+    $order = CustomerOrder::create(['created_by' => $this->staff->id, 'customer_id' => $customer->id, 'customer_name' => 'Aisha Rahman', 'customer_phone' => '0123456789', 'collection_date' => today()->addDay(), 'status' => 'pending']);
+
+    $this->actingAs($this->staff)->get(route('staff.customers.edit', $customer))->assertOk()->assertSee('Aisha Rahman');
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.customers.update', $customer), ['name' => 'Aisha Binti Rahman', 'phone' => '011-1234 5678', 'email' => 'aisha@example.com'])
+        ->assertRedirect(route('staff.customers.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($customer->fresh())
+        ->name->toBe('Aisha Binti Rahman')
+        ->phone->toBe('01112345678')
+        ->and($order->fresh())
+        ->customer_name->toBe('Aisha Rahman')
+        ->customer_phone->toBe('0123456789');
+});
+
+test('editing a customer validates the details', function () {
+    Customer::factory()->create(['email' => 'taken@example.com']);
+    $customer = Customer::factory()->create();
+
+    $this->actingAs($this->staff)
+        ->put(route('staff.customers.update', $customer), ['name' => '', 'phone' => '012-345', 'email' => 'taken@example.com'])
+        ->assertSessionHasErrors(['name', 'phone', 'email']);
+});
+
+test('staff can delete a customer with no orders', function () {
+    $customer = Customer::factory()->create();
+
+    $this->actingAs($this->staff)
+        ->delete(route('staff.customers.destroy', $customer))
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect(Customer::count())->toBe(0);
+});
+
+test('a customer with orders cannot be deleted', function () {
+    $customer = Customer::factory()->create();
+    CustomerOrder::create(['created_by' => $this->staff->id, 'customer_id' => $customer->id, 'customer_name' => $customer->name, 'collection_date' => today()->addDay(), 'status' => 'pending']);
+
+    $this->actingAs($this->staff)
+        ->delete(route('staff.customers.destroy', $customer))
+        ->assertSessionHasErrors('customer');
+
+    expect($customer->fresh())->not->toBeNull();
+});
+
 test('staff can create an order for a saved customer and the details are copied onto the order', function () {
     $customer = Customer::factory()->create(['name' => 'Priya Nair', 'email' => 'priya@example.com', 'phone' => '017-889 1020']);
 
